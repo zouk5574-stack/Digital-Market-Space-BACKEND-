@@ -9,13 +9,14 @@ app.use(express.json());
 const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
-
 import paymentRoutes from "./routes/paymentRoutes.js";
 app.use("/api/payments", paymentRoutes);
-
 import adminAuthRoutes from "./routes/adminAuthRoutes.js";
 app.use("/api/admin/auth", adminAuthRoutes);
+const transactionRoutes = require("./routes/transactionRoutes");
 
+// ...
+app.use("/api/transactions", transactionRoutes);
 // Utilisation des routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
