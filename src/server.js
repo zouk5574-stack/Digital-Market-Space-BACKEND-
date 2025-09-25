@@ -11,8 +11,8 @@ const authRoutes = require("./routes/authRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const withdrawalRoutes = require("./routes/withdrawalRoutes");
 const escrowRoutes = require("./routes/escrowRoutes");
-
 const app = express();
+import adminRoutes from "./routes/adminRoutes.js";
 
 // 🛡️ Middlewares globaux
 app.use(cors()); // autorise les requêtes cross-origin
@@ -24,6 +24,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/withdrawals", withdrawalRoutes);
 app.use("/api/escrow", escrowRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 📌 Route de test (ping)
 app.get("/", (req, res) => {
