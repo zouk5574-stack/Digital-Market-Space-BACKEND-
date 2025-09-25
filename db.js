@@ -1,11 +1,18 @@
-// db.js
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+// db.js - pool Postgres
+const { Pool } = require("pg");
 
-// Connexion à Supabase avec les variables d'environnement
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error("ERREUR: variable DATABASE_URL non définie !");
+  process.exit(1);
+}
 
-module.exports = supabase;
+// Si Supabase (Postgres) nécessite SSL, on configure rejectUnauthorized false
+const pool = new Pool({
+  connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+module.exports = pool;
