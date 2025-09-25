@@ -1,29 +1,49 @@
-// src/server.js
-import express from 'express';
-import dotenv from 'dotenv';
-import authRoutes from './routes/authRoutes.js';
-import bodyParser from 'body-parser';
-import cors from 'cors';
+require("dotenv").config(); // Charge les variables d'environnement (.env)
+const express = require("express");
+const cors = require("cors");
+const morgan = require("morgan");
 
-dotenv.config();
+// Import de la connexion DB
+const pool = require("./config/db");
+
+// Import des routes
+const authRoutes = require("./routes/authRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const withdrawalRoutes = require("./routes/withdrawalRoutes");
+const escrowRoutes = require("./routes/escrowRoutes");
 
 const app = express();
-app.use(cors());
-app.use(bodyParser.json());
 
-// health
-app.get('/', (req, res) => res.send({ ok: true, timestamp: new Date().toISOString() }));
+// 🛡️ Middlewares globaux
+app.use(cors()); // autorise les requêtes cross-origin
+app.use(express.json()); // parse JSON dans req.body
+app.use(morgan("dev")); // log des requêtes dans la console (utile en dev)
 
-// mount auth routes
-app.use('/api/auth', authRoutes);
+// 🌍 Routes principales
+app.use("/api/auth", authRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/withdrawals", withdrawalRoutes);
+app.use("/api/escrow", escrowRoutes);
 
-// catch-all
-app.use((err, req, res, next) => {
-  console.error('Unhandled error', err);
-  res.status(500).json({ message: 'Internal Server Error' });
+// 📌 Route de test (ping)
+app.get("/", (req, res) => {
+  res.json({ message: "🚀 Digital Marketplace backend is running!" });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// 📦 Vérification DB avant de démarrer
+const startServer = async () => {
+  try {
+    await pool.query("SELECT NOW()"); // test rapide de la DB
+    console.log("✅ Database connected");
+
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("❌ Database connection failed:", error.message);
+    process.exit(1);
+  }
+};
+
+startServer();
