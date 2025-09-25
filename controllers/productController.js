@@ -1,75 +1,103 @@
-import pool from "../db.js";
+// controllers/productController.js
+const pool = require("../db");
+const { v4: uuidv4 } = require("uuid");
 
-// ✅ GET tous les produits
-export const getProducts = async (req, res) => {
+// GET /api/products
+async function getAllProducts(req, res) {
   try {
-    const result = await pool.query("SELECT * FROM products ORDER BY created_at DESC");
-    res.json(result.rows);
+    const q = await pool.query("SELECT * FROM products ORDER BY created_at DESC LIMIT 100");
+    res.json(q.rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-};
+}
 
-// ✅ GET un produit par ID
-export const getProductById = async (req, res) => {
+// GET /api/products/:id
+async function getProduct(req, res) {
   try {
     const { id } = req.params;
-    const result = await pool.query("SELECT * FROM products WHERE id = $1", [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Produit non trouvé" });
-    }
-    res.json(result.rows[0]);
+    const q = await pool.query("SELECT * FROM products WHERE id = $1", [id]);
+    if (q.rows.length === 0) return res.status(404).json({ error: "Produit non trouvé" });
+    res.json(q.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-};
+}
 
-// ✅ POST créer produit
-export const createProduct = async (req, res) => {
+// POST /api/products
+async function createProduct(req, res) {
   try {
-    const { title, description, price, currency, stock, is_digital, category, featured_image_url } = req.body;
-    const result = await pool.query(
-      `INSERT INTO products 
-      (title, description, price, currency, stock, is_digital, category, featured_image_url) 
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [title, description, price, currency, stock, is_digital, category, featured_image_url]
-    );
+    const { title, description, price, currency, stock, is_digital, category_id, featured_image_url } = req.body;
+
+    if (!title || price == null) return res.status(400).json({ error: "title et price requis" });
+
+    // Vérif rôle: autoriser seulement vendor/admin
+    const user = req.user || {};
+    if (!["vendor", "admin"].includes(user.role)) {
+      return res.status(403).json({ error: "Accès refusé: role vendeur requis" });
+    }
+
+    const id = uuidv4();
+    const vendor_q = await pool.query("SELECT id FROM vendors WHERE user_id = $1", [user.id]);
+    const vendor_id = vendor_q.rows.length ? vendor_q.rows[0].id : null;
+
+    const insertQ = `
+      INSERT INTO products (id, vendor_id, title, description, price, currency, stock, is_digital, category_id, featured_image_url, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now(),now()) RETURNING *`;
+    const values = [id, vendor_id, title, description || null, price, currency || "EUR", stock || 0, is_digital || false, category_id || null, featured_image_url || null];
+    const result = await pool.query(insertQ, values);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-};
+}
 
-// ✅ PUT modifier produit
-export const updateProduct = async (req, res) => {
+// PUT /api/products/:id
+async function updateProduct(req, res) {
   try {
     const { id } = req.params;
-    const { title, description, price, currency, stock, is_digital, category, featured_image_url } = req.body;
-    const result = await pool.query(
-      `UPDATE products SET 
-      title=$1, description=$2, price=$3, currency=$4, stock=$5, is_digital=$6, category=$7, featured_image_url=$8, updated_at=NOW()
-      WHERE id=$9 RETURNING *`,
-      [title, description, price, currency, stock, is_digital, category, featured_image_url, id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Produit non trouvé" });
+    const { title, description, price, currency, stock, is_digital, category_id, featured_image_url, status } = req.body;
+
+    // Vérif produit exist
+    const check = await pool.query("SELECT * FROM products WHERE id = $1", [id]);
+    if (check.rows.length === 0) return res.status(404).json({ error: "Produit non trouvé" });
+
+    // Autorisation simple: vendeur/admin
+    const user = req.user || {};
+    if (!["vendor", "admin"].includes(user.role)) {
+      return res.status(403).json({ error: "Accès refusé" });
     }
+
+    const q = `
+      UPDATE products SET title=$1, description=$2, price=$3, currency=$4, stock=$5, is_digital=$6, category_id=$7, featured_image_url=$8, status=$9, updated_at=now()
+      WHERE id=$10 RETURNING *`;
+    const values = [title, description, price, currency, stock, is_digital, category_id, featured_image_url, status || "published", id];
+    const result = await pool.query(q, values);
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-};
+}
 
-// ✅ DELETE supprimer produit
-export const deleteProduct = async (req, res) => {
+// DELETE /api/products/:id
+async function deleteProduct(req, res) {
   try {
     const { id } = req.params;
-    const result = await pool.query("DELETE FROM products WHERE id=$1 RETURNING *", [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Produit non trouvé" });
+    const user = req.user || {};
+    if (!["vendor", "admin"].includes(user.role)) {
+      return res.status(403).json({ error: "Accès refusé" });
     }
-    res.json({ message: "Produit supprimé avec succès" });
+    const result = await pool.query("DELETE FROM products WHERE id=$1 RETURNING *", [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: "Produit non trouvé" });
+    res.json({ message: "Produit supprimé" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-};
+}
+
+module.exports = { getAllProducts, getProduct, createProduct, updateProduct, deleteProduct };
