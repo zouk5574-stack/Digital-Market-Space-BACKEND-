@@ -2,7 +2,7 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
 dotenv.config();
-
+import pool, { query } from "../config/db.js";
 const { Pool } = pg;
 
 if (!process.env.DATABASE_URL) {
