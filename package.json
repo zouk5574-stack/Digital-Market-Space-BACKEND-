@@ -1,36 +1,17 @@
 {
-  "name": "digital-market-space-backend",
+  "name": "digital-market-backend",
   "version": "1.0.0",
-  "description": "Backend de la marketplace multi-vendeurs avec Express et Supabase",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
-  "keywords": [
-    "marketplace",
-    "backend",
-    "express",
-    "supabase"
-  ],
-  "author": "TonNom",
-  "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.7",
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "pg": "^8.11.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+    "jsonwebtoken": "^9.0.0",
+    "pg": "^8.10.0",
+    "uuid": "^9.0.0"
   }
-}
-"main": "server.js",
-"scripts": {
-  "start": "node server.js"
-},
-"dependencies": {
-  "express": "^4.18.2",
-  "@supabase/supabase-js": "^2.39.3"
 }
