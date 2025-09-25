@@ -1,14 +1,16 @@
-import express from "express";
-
+const express = require("express");
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Test route racine "/"
+// Middleware pour lire du JSON
+app.use(express.json());
+
+// Route de test
 app.get("/", (req, res) => {
-  res.send("🚀 Hello frérot ! Ton serveur Render fonctionne ✅");
+  res.send("🚀 Backend Render est en ligne !");
 });
 
-// Démarrer le serveur
+// Render donne un port automatiquement → on le récupère
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Serveur lancé sur le port ${PORT}`);
+  console.log(`✅ Serveur démarré sur le port ${PORT}`);
 });
