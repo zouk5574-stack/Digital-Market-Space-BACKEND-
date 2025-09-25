@@ -1,85 +1,66 @@
-// src/controllers/authController.js
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { query } from '../db.js';
+import pool from '../db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+// 📌 Inscription utilisateur
+export const register = async (req, res) => {
+  const { fullname, phone, password } = req.body;
 
-if (!JWT_SECRET) {
-  console.error('JWT_SECRET not set in env');
-  process.exit(1);
-}
-
-function signToken(user) {
-  return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
-  );
-}
-
-export async function register(req, res) {
   try {
-    const { full_name, email, password, role = 'vendeur' } = req.body;
-    if (!full_name || !email || !password) {
-      return res.status(400).json({ message: 'full_name, email and password required' });
-    }
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    // check existing email
-    const { rows: existing } = await query('SELECT id FROM users WHERE email=$1', [email]);
-    if (existing.length > 0) {
-      return res.status(409).json({ message: 'Email already registered' });
-    }
+    const result = await pool.query(
+      "INSERT INTO users (fullname, phone, password_hash) VALUES ($1, $2, $3) RETURNING id, fullname, phone",
+      [fullname, phone, hashedPassword]
+    );
 
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
-
-    // Insert - adapt column names to your table if different
-    const insertSQL = `INSERT INTO users (nom_complet, email, password_hash, role, created_at)
-                       VALUES ($1,$2,$3,$4,now())
-                       RETURNING id, email, role`;
-    // Many DBs may use 'nom_complet' or 'full_name'; if your column name is different,
-    // change the above SQL accordingly.
-    const { rows } = await query(insertSQL, [full_name, email, password_hash, role]);
-    const user = rows[0];
-
-    const token = signToken(user);
-    return res.status(201).json({ token, user: { id: user.id, email: user.email, role: user.role } });
+    res.status(201).json({
+      message: "Utilisateur créé ✅",
+      user: result.rows[0]
+    });
   } catch (err) {
-    console.error('register error', err);
-    return res.status(500).json({ message: 'Internal error' });
+    console.error("Erreur inscription:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-}
+};
 
-export async function login(req, res) {
+// 📌 Connexion utilisateur
+export const login = async (req, res) => {
+  const { phone, password } = req.body;
+
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    const result = await pool.query("SELECT * FROM users WHERE phone = $1", [phone]);
+    const user = result.rows[0];
 
-    const { rows } = await query('SELECT id, email, password_hash, role FROM users WHERE email=$1', [email]);
-    if (rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(400).json({ error: "Utilisateur non trouvé" });
 
-    const user = rows[0];
-    const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) return res.status(401).json({ message: 'Invalid credentials' });
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) return res.status(400).json({ error: "Mot de passe incorrect" });
 
-    const token = signToken(user);
-    return res.json({ token, user: { id: user.id, email: user.email, role: user.role } });
+    const token = jwt.sign(
+      { id: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ message: "Connexion réussie ✅", token });
   } catch (err) {
-    console.error('login error', err);
-    return res.status(500).json({ message: 'Internal error' });
+    console.error("Erreur connexion:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-}
+};
 
-export async function getMe(req, res) {
+// 📌 Récupérer profil utilisateur
+export const getMe = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { rows } = await query('SELECT id, nom_complet, email, role, created_at FROM users WHERE id=$1', [userId]);
-    if (rows.length === 0) return res.status(404).json({ message: 'User not found' });
-    return res.json(rows[0]);
+    const result = await pool.query(
+      "SELECT id, fullname, phone FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error('getMe error', err);
-    return res.status(500).json({ message: 'Internal error' });
+    console.error("Erreur getMe:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
   }
-}
+};
