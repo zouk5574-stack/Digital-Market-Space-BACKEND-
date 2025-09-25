@@ -1,3 +1,4 @@
+import productRoutes from "./routes/products.js";
 const express = require('express');
 const dotenv = require('dotenv');
 const routes = require('./routes');
@@ -17,3 +18,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serveur démarré sur http://localhost:${PORT}`);
 });
+app.use("/api/products", productRoutes);
