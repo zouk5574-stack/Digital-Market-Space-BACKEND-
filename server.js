@@ -1,15 +1,27 @@
+// serveur principal - CommonJS (compatible Render par défaut)
 const express = require("express");
-const app = express();
+const cors = require("cors");
+require("dotenv").config();
 
-// Middleware pour lire du JSON
+const authRoutes = require("./routes/auth");
+const productRoutes = require("./routes/products");
+const orderRoutes = require("./routes/orders");
+
+const app = express();
+app.use(cors());
 app.use(express.json());
 
-// Route de test
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+
+// Route racine simple (test)
 app.get("/", (req, res) => {
-  res.send("🚀 Backend Render est en ligne !");
+  res.send("🚀 Digital Market Space - Backend en ligne !");
 });
 
-// Render donne un port automatiquement → on le récupère
+// Démarrage serveur
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`✅ Serveur démarré sur le port ${PORT}`);
