@@ -1,21 +1,14 @@
-import productRoutes from "./routes/products.js";
-const express = require('express');
-const dotenv = require('dotenv');
-const routes = require('./routes');
-
-dotenv.config();
+import express from "express";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use('/api', routes);
-
-app.get('/', (req, res) => {
-  res.send('🚀 API Digital Market Space est en ligne !');
+// Test route racine "/"
+app.get("/", (req, res) => {
+  res.send("🚀 Hello frérot ! Ton serveur Render fonctionne ✅");
 });
 
+// Démarrer le serveur
 app.listen(PORT, () => {
-  console.log(`Serveur démarré sur http://localhost:${PORT}`);
+  console.log(`✅ Serveur lancé sur le port ${PORT}`);
 });
-app.use("/api/products", productRoutes);
