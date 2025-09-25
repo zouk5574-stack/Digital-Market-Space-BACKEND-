@@ -13,6 +13,9 @@ const orderRoutes = require("./routes/orderRoutes");
 import paymentRoutes from "./routes/paymentRoutes.js";
 app.use("/api/payments", paymentRoutes);
 
+import adminAuthRoutes from "./routes/adminAuthRoutes.js";
+app.use("/api/admin/auth", adminAuthRoutes);
+
 // Utilisation des routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
