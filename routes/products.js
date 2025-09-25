@@ -1,19 +1,23 @@
-import express from "express";
-import {
-  getProducts,
-  getProductById,
+// routes/products.js
+const express = require("express");
+const {
+  getAllProducts,
+  getProduct,
   createProduct,
   updateProduct,
-  deleteProduct,
-} from "../controllers/productController.js";
+  deleteProduct
+} = require("../controllers/productController");
+const auth = require("../middleware/auth");
 
 const router = express.Router();
 
-// Routes Produits
-router.get("/", getProducts);           // GET tous les produits
-router.get("/:id", getProductById);     // GET un produit par id
-router.post("/", createProduct);        // POST créer produit
-router.put("/:id", updateProduct);      // PUT modifier produit
-router.delete("/:id", deleteProduct);   // DELETE supprimer produit
+// publiques
+router.get("/", getAllProducts);
+router.get("/:id", getProduct);
 
-export default router;
+// protégées (création/modif/suppression réservées à vendeurs/admin)
+router.post("/", auth, createProduct);
+router.put("/:id", auth, updateProduct);
+router.delete("/:id", auth, deleteProduct);
+
+module.exports = router;
