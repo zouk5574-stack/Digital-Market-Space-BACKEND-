@@ -10,6 +10,9 @@ const authRoutes = require("./routes/authRoutes");
 const productRoutes = require("./routes/productRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 
+import paymentRoutes from "./routes/paymentRoutes.js";
+app.use("/api/payments", paymentRoutes);
+
 // Utilisation des routes
 app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
