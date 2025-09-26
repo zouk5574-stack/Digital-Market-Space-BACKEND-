@@ -1,21 +1,10 @@
-import express from "express";
-import serverless from "serverless-http";
-import cors from "cors";
+import app from './app.js';
+import dotenv from 'dotenv';
+import './cron/maintenance.js'; // start cron jobs (safe: cron checks CRON_SECRET & env)
+dotenv.config();
 
-const app = express();
+const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// === Tes routes habituelles ===
-app.get("/", (req, res) => {
-  res.send("Bienvenue sur Digital Market Space 🚀");
+app.listen(PORT, () => {
+  console.log(`🚀 Digital Market Space API listening on port ${PORT}`);
 });
-
-app.get("/api/test", (req, res) => {
-  res.json({ message: "API opérationnelle sur Vercel !" });
-});
-
-// === Export pour Vercel ===
-export const handler = serverless(app);
