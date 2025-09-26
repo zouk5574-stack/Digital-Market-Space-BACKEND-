@@ -1,24 +1,25 @@
-import jwt from 'jsonwebtoken';
-import { query } from '../config/db.js';
+const jwt = require("jsonwebtoken");
 
-export async function protect(req, res, next) {
-  try {
-    const auth = req.headers.authorization;
-    if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Not authorized' });
-    const token = auth.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const r = await query('SELECT id, full_name, email, role FROM users WHERE id=$1', [decoded.id]);
-    if (!r.rows[0]) return res.status(401).json({ error: 'User not found' });
-    req.user = r.rows[0];
-    next();
-  } catch (err) {
-    console.error('protect error', err.message || err);
-    return res.status(401).json({ error: 'Token invalid or expired' });
+// Vérification du token
+exports.verifyToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(403).json({ message: "Token manquant" });
   }
-}
 
-export function adminOnly(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: 'Not authorized' });
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(401).json({ message: "Token invalide" });
+    req.user = user;
+    next();
+  });
+};
+
+// Vérification admin uniquement
+exports.verifyAdmin = (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Accès réservé à l’administrateur" });
+  }
   next();
-}
+};
