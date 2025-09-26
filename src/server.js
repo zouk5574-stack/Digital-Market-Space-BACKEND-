@@ -11,7 +11,10 @@ import "./cron/autoConfirmFreelance.js";
 import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
 import "./cron/autoConfirmFreelance.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
+import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
 
+// ... autres middlewares
+app.use("/api/admin/settings", adminSettingsRoutes);
 // ...
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/freelance", freelanceDeliveryRoutes);
