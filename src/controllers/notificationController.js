@@ -1,59 +1,71 @@
-// controllers/notificationController.js
 import db from "../config/db.js";
 
 /**
- * Créer une nouvelle notification globale (admin uniquement)
+ * Envoyer une notification à tous les utilisateurs
  */
-export async function createNotification(req, res) {
-  const { title, message } = req.body;
-
+export const sendNotification = async (req, res) => {
   try {
-    const notif = await db.one(
-      `INSERT INTO notifications (title, message, is_global)
-       VALUES ($1, $2, true) RETURNING *`,
-      [title, message]
-    );
+    const { title, message } = req.body;
 
-    // Associer à tous les utilisateurs
-    await db.none(
-      `INSERT INTO user_notifications (user_id, notification_id)
-       SELECT id, $1 FROM users`,
-      [notif.id]
-    );
+    if (!title || !message) {
+      return res.status(400).json({ error: "Titre et message requis" });
+    }
 
-    res.status(201).json({ message: "Notification créée et envoyée ✅", notif });
-  } catch (error) {
-    console.error("Erreur createNotification:", error);
+    // On insère une notif pour tous les utilisateurs
+    const users = await db.manyOrNone("SELECT id FROM users");
+
+    for (const user of users) {
+      await db.none(
+        "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+        [user.id, title, message]
+      );
+    }
+
+    res.json({ success: true, message: "Notification envoyée à tous les utilisateurs 🚀" });
+  } catch (err) {
+    console.error("Erreur sendNotification:", err.message);
     res.status(500).json({ error: "Erreur serveur" });
   }
-}
+};
 
 /**
  * Récupérer les notifications d’un utilisateur
  */
-export async function getUserNotifications(req, res) {
-  const userId = req.user.id;
-
+export const getNotifications = async (req, res) => {
   try {
-    const notifications = await db.manyOrNone(
-      `SELECT n.id, n.title, n.message, un.is_read, n.created_at
-       FROM notifications n
-       JOIN user_notifications un ON un.notification_id = n.id
-       WHERE un.user_id = $1
-       ORDER BY n.created_at DESC`,
+    const userId = req.user.id;
+
+    const notifs = await db.manyOrNone(
+      "SELECT id, title, message, created_at, read FROM notifications WHERE user_id = $1 ORDER BY created_at DESC",
       [userId]
     );
 
-    res.json({ notifications });
-  } catch (error) {
-    console.error("Erreur getUserNotifications:", error);
+    res.json(notifs);
+  } catch (err) {
+    console.error("Erreur getNotifications:", err.message);
     res.status(500).json({ error: "Erreur serveur" });
   }
-}
+};
 
 /**
  * Marquer une notification comme lue
  */
+export const markAsRead = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    await db.none(
+      "UPDATE notifications SET read = TRUE WHERE id = $1 AND user_id = $2",
+      [id, userId]
+    );
+
+    res.json({ success: true, message: "Notification marquée comme lue ✅" });
+  } catch (err) {
+    console.error("Erreur markAsRead:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+};
 export async function markAsRead(req, res) {
   const { notificationId } = req.body;
   const userId = req.user.id;
