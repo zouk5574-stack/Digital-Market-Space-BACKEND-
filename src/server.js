@@ -1,50 +1,39 @@
 require("dotenv").config(); // Charge les variables d'environnement (.env)
-const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import morgan from "morgan";
 
-// Import de la connexion DB
-const pool = require("./config/db");
+import adminAuthRoutes from "./routes/admin/adminAuthRoutes.js";
+import adminPaymentRoutes from "./routes/admin/adminPaymentRoutes.js";
+import adminRoutes from "./routes/admin/adminRoutes.js";
 
-// Import des routes
-const authRoutes = require("./routes/authRoutes");
-const orderRoutes = require("./routes/orderRoutes");
-const withdrawalRoutes = require("./routes/withdrawalRoutes");
-const escrowRoutes = require("./routes/escrowRoutes");
+import authRoutes from "./routes/user/authRoutes.js";
+import paymentRoutes from "./routes/user/paymentRoutes.js";
+import productRoutes from "./routes/user/productRoutes.js";
+import orderRoutes from "./routes/user/orderRoutes.js";
+
+import transactionRoutes from "./routes/transactionRoutes.js";
+
+dotenv.config();
 const app = express();
-import adminRoutes from "./routes/adminRoutes.js";
 
-// 🛡️ Middlewares globaux
-app.use(cors()); // autorise les requêtes cross-origin
-app.use(express.json()); // parse JSON dans req.body
-app.use(morgan("dev")); // log des requêtes dans la console (utile en dev)
+app.use(cors());
+app.use(express.json());
+app.use(morgan("dev"));
 
-// 🌍 Routes principales
-app.use("/api/auth", authRoutes);
-app.use("/api/orders", orderRoutes);
-app.use("/api/withdrawals", withdrawalRoutes);
-app.use("/api/escrow", escrowRoutes);
+// ✅ Routes admin
+app.use("/api/admin/auth", adminAuthRoutes);
+app.use("/api/admin/payments", adminPaymentRoutes);
 app.use("/api/admin", adminRoutes);
 
-// 📌 Route de test (ping)
-app.get("/", (req, res) => {
-  res.json({ message: "🚀 Digital Marketplace backend is running!" });
-});
+// ✅ Routes user
+app.use("/api/auth", authRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
 
-// 📦 Vérification DB avant de démarrer
-const startServer = async () => {
-  try {
-    await pool.query("SELECT NOW()"); // test rapide de la DB
-    console.log("✅ Database connected");
+// ✅ Routes globales
+app.use("/api/transactions", transactionRoutes);
 
-    const PORT = process.env.PORT || 5000;
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error("❌ Database connection failed:", error.message);
-    process.exit(1);
-  }
-};
-
-startServer();
+export default app;
