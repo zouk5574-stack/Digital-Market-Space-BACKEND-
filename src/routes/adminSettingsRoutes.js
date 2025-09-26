@@ -1,11 +1,16 @@
 import express from "express";
-import { getAutoConfirmDelay, updateAutoConfirmDelay } from "../controllers/adminSettingsController.js";
-import { protect, adminOnly } from "../middleware/auth.js";
+import { authAdmin } from "../middleware/authAdmin.js";
+import {
+  getSettings,
+  updateSettings,
+} from "../controllers/adminSettingsController.js";
 
 const router = express.Router();
 
-// ✅ Accessible uniquement à l’admin
-router.get("/auto-confirm-delay", protect, adminOnly, getAutoConfirmDelay);
-router.post("/auto-confirm-delay", protect, adminOnly, updateAutoConfirmDelay);
+// ✅ Récupérer les paramètres admin
+router.get("/", authAdmin, getSettings);
+
+// ✅ Mettre à jour les paramètres admin
+router.put("/", authAdmin, updateSettings);
 
 export default router;
