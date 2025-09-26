@@ -12,5 +12,7 @@
     "dotenv": "^16.0.3",
     "jsonwebtoken": "^9.0.0",
     "bcrypt": "^5.1.0"
-  }
-}
+  },
+  "dependencies": {
+    "cors": "^2.8.5"
+ }
