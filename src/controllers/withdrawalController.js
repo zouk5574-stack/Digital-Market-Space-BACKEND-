@@ -1,70 +1,29 @@
-// controllers/withdrawalController.js
-const db = require("../config/db"); // ton pool/instance de PostgreSQL
-const fedapay = require("fedapay"); // SDK officiel ou API REST via axios
-const moment = require("moment");
+import { query } from '../config/db.js';
+import { createPayout } from '../config/fedapay.js';
 
-// ⚡ Initialiser Fedapay (clé secrète depuis .env)
-fedapay.apiKey = process.env.FEDAPAY_SECRET_KEY;
-
-/**
- * Créer une demande de retrait
- */
-exports.requestWithdrawal = async (req, res) => {
-  const { seller_id, amount } = req.body;
-
+export async function requestWithdraw(req, res) {
   try {
-    // Vérifier si le vendeur a assez de solde disponible
-    const sellerBalance = await db.oneOrNone(
-      "SELECT balance FROM sellers WHERE id = $1",
-      [seller_id]
-    );
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    const { amount, currency = 'USD', provider_data } = req.body;
+    if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'Invalid amount' });
 
-    if (!sellerBalance || sellerBalance.balance < amount) {
-      return res.status(400).json({ message: "Solde insuffisant" });
-    }
+    const b = await query('SELECT balance FROM users WHERE id=$1', [user.id]);
+    const bal = Number(b.rows[0]?.balance || 0);
+    if (bal < Number(amount)) return res.status(400).json({ error: 'Insufficient balance' });
 
-    // Créer la demande de retrait
-    const withdrawal = await db.one(
-      `INSERT INTO withdrawals (seller_id, amount, status, requested_at)
-       VALUES ($1, $2, 'pending', NOW())
-       RETURNING *`,
-      [seller_id, amount]
-    );
+    // reserve funds immediately
+    await query('UPDATE users SET balance = balance - $1 WHERE id=$2', [amount, user.id]);
+    const w = await query('INSERT INTO withdrawals (seller_id, amount, currency, provider, status, requested_at) VALUES ($1,$2,$3,$4,$5,now()) RETURNING *', [user.id, amount, currency, 'fedapay', 'requested']);
 
-    return res.status(201).json({ message: "Demande de retrait créée", withdrawal });
-  } catch (error) {
-    console.error("Erreur requestWithdrawal:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    // Optionally auto-create payout using createPayout(provider_data) depending on settings/verification
+
+    res.status(201).json({ withdrawal: w.rows[0] });
+  } catch (err) {
+    console.error('requestWithdraw', err);
+    res.status(500).json({ error: 'Server error' });
   }
-};
-
-/**
- * Approuver un retrait (admin action ou auto-approve après T heures)
- */
-exports.approveWithdrawal = async (req, res) => {
-  const { withdrawal_id } = req.body;
-
-  try {
-    const withdrawal = await db.oneOrNone(
-      "SELECT * FROM withdrawals WHERE id = $1",
-      [withdrawal_id]
-    );
-
-    if (!withdrawal) {
-      return res.status(404).json({ message: "Retrait introuvable" });
-    }
-
-    if (withdrawal.status !== "pending") {
-      return res.status(400).json({ message: "Le retrait n'est pas en attente" });
-    }
-
-    const updated = await db.one(
-      `UPDATE withdrawals 
-       SET status = 'approved', approved_at = NOW() 
-       WHERE id = $1 RETURNING *`,
-      [withdrawal_id]
-    );
-
+}
     return res.json({ message: "Retrait approuvé", withdrawal: updated });
   } catch (error) {
     console.error("Erreur approveWithdrawal:", error);
