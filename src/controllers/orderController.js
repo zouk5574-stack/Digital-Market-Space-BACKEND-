@@ -1,48 +1,102 @@
-import { query } from '../config/db.js';
+// src/controllers/orderController.js
+const db = require("../config/db");
 
-export async function createOrder(req, res) {
+/**
+ * Créer une nouvelle commande après le paiement
+ */
+exports.createOrder = async (req, res) => {
+  const { buyer_id, seller_id, product_id, amount } = req.body;
+
   try {
-    const buyer = req.user;
-    if (!buyer) return res.status(401).json({ error: 'Not authenticated' });
+    // Récupérer le taux de commission depuis settings
+    const settings = await db.oneOrNone("SELECT commission_rate FROM settings LIMIT 1");
+    const commissionRate = settings ? settings.commission_rate : 10;
 
-    const { items } = req.body; // [{ product_id, quantity }]
-    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'No items' });
+    const commission = (amount * commissionRate) / 100;
+    const netAmount = amount - commission;
 
-    const client = await (await import('../config/db.js')).default.connect();
-    try {
-      await client.query('BEGIN');
-      let total = 0;
-      const orderRes = await client.query('INSERT INTO orders (buyer_id, total_amount, currency, status) VALUES ($1,$2,$3,$4) RETURNING *', [buyer.id, 0, 'USD', 'pending']);
-      const order = orderRes.rows[0];
+    const order = await db.one(
+      `INSERT INTO orders (buyer_id, seller_id, product_id, amount, commission, net_amount, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())
+       RETURNING *`,
+      [buyer_id, seller_id, product_id, amount, commission, netAmount]
+    );
 
-      for (const it of items) {
-        const p = await client.query('SELECT id, price, seller_id, is_digital, stock FROM products WHERE id=$1 FOR UPDATE', [it.product_id]);
-        if (!p.rows[0]) throw new Error('Product not found');
-        const prod = p.rows[0];
-        const qty = Number(it.quantity) || 1;
-        if (prod.stock !== null && prod.stock < qty) throw new Error('Insufficient stock');
-
-        total += Number(prod.price) * qty;
-        await client.query('INSERT INTO order_items (order_id, product_id, seller_id, unit_price, quantity) VALUES ($1,$2,$3,$4,$5)', [order.id, prod.id, prod.seller_id, prod.price, qty]);
-
-        // decrement stock
-        if (prod.stock !== null) {
-          await client.query('UPDATE products SET stock = stock - $1 WHERE id=$2', [qty, prod.id]);
-        }
-      }
-
-      await client.query('UPDATE orders SET total_amount=$1 WHERE id=$2', [total, order.id]);
-      await client.query('COMMIT');
-
-      res.status(201).json({ order_id: order.id, total });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (err) {
-    console.error('createOrder', err);
-    res.status(500).json({ error: err.message || 'Server error' });
+    return res.status(201).json({ message: "Commande créée avec succès", order });
+  } catch (error) {
+    console.error("Erreur createOrder:", error);
+    return res.status(500).json({ message: "Erreur serveur" });
   }
-}
+};
+
+/**
+ * Confirmer la livraison par l’acheteur → libération des fonds au vendeur
+ */
+exports.confirmOrder = async (req, res) => {
+  const { order_id, buyer_id } = req.body;
+
+  try {
+    const order = await db.oneOrNone(
+      "SELECT * FROM orders WHERE id = $1 AND buyer_id = $2",
+      [order_id, buyer_id]
+    );
+
+    if (!order) {
+      return res.status(404).json({ message: "Commande introuvable ou non autorisée" });
+    }
+
+    if (order.status !== "delivered") {
+      return res.status(400).json({ message: "Commande non encore livrée ou déjà confirmée" });
+    }
+
+    // Libérer les fonds au vendeur
+    await db.none(
+      `UPDATE sellers SET balance = balance + $1 WHERE id = $2`,
+      [order.net_amount, order.seller_id]
+    );
+
+    // Mettre à jour la commande
+    const updated = await db.one(
+      `UPDATE orders 
+       SET status = 'confirmed', confirmed_at = NOW(), updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [order_id]
+    );
+
+    return res.json({ message: "Commande confirmée, fonds libérés", order: updated });
+  } catch (error) {
+    console.error("Erreur confirmOrder:", error);
+    return res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * Marquer une commande en litige (admin uniquement)
+ */
+exports.markDispute = async (req, res) => {
+  const { order_id } = req.body;
+
+  try {
+    const order = await db.oneOrNone("SELECT * FROM orders WHERE id = $1", [order_id]);
+
+    if (!order) {
+      return res.status(404).json({ message: "Commande introuvable" });
+    }
+
+    if (order.status !== "pending" && order.status !== "delivered") {
+      return res.status(400).json({ message: "Impossible de mettre en litige cette commande" });
+    }
+
+    const updated = await db.one(
+      `UPDATE orders 
+       SET status = 'dispute', updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [order_id]
+    );
+
+    return res.json({ message: "Commande mise en litige", order: updated });
+  } catch (error) {
+    console.error("Erreur markDispute:", error);
+    return res.status(500).json({ message: "Erreur serveur" });
+  }
+};
