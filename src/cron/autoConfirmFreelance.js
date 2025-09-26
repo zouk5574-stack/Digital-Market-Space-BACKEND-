@@ -1,40 +1,52 @@
 import cron from "node-cron";
-import pool from "../config/db.js";
+import db from "../config/db.js";
 
-/**
- * Cron job pour confirmer automatiquement les livraisons freelance
- * après expiration du délai admin (par défaut 38h).
- */
+// ✅ Chaque heure, vérifie les livraisons non confirmées
 cron.schedule("0 * * * *", async () => {
-  // ⏰ exécution toutes les heures
-  console.log("⏳ Vérification des livraisons freelance en attente...");
+  console.log("⏳ Vérification des livraisons freelance non confirmées...");
 
   try {
-    // Récupérer le délai défini par l’admin
-    const settingsRes = await pool.query(
-      "SELECT auto_confirm_delay_hours FROM admin_settings LIMIT 1"
+    // Récupérer le délai configuré (par défaut 38h)
+    const settings = await db.oneOrNone(
+      "SELECT confirmation_delay_hours FROM admin_settings LIMIT 1"
     );
-    const delayHours = settingsRes.rows[0]?.auto_confirm_delay_hours || 38;
+    const delay = settings ? settings.confirmation_delay_hours : 38;
 
-    // Confirmer automatiquement les livraisons expirées
-    const result = await pool.query(
-      `
-      UPDATE freelance_deliveries fd
-      SET status = 'confirmed', confirmed_at = NOW()
-      FROM freelance_orders fo
-      WHERE fd.order_id = fo.id
-        AND fd.status = 'delivered'
-        AND fo.status = 'in_progress'
-        AND fd.delivered_at <= NOW() - ($1 || ' hours')::interval
-      RETURNING fd.id, fd.order_id;
-      `,
-      [delayHours]
+    // Sélectionner les livraisons "delivered" mais pas confirmées depuis + delay heures
+    const deliveries = await db.manyOrNone(
+      `SELECT fd.*, fo.buyer_id, fo.amount, fo.seller_id, u.role
+       FROM freelance_deliveries fd
+       JOIN freelance_orders fo ON fo.id = fd.order_id
+       JOIN users u ON u.id = fo.seller_id
+       WHERE fd.status = 'delivered'
+       AND fd.delivered_at <= NOW() - ($1 || ' hours')::INTERVAL`,
+      [delay]
     );
 
-    if (result.rowCount > 0) {
-      console.log(`✅ ${result.rowCount} livraisons confirmées automatiquement.`);
-    } else {
-      console.log("ℹ️ Aucune livraison à confirmer automatiquement.");
+    for (const delivery of deliveries) {
+      let commissionRate = 10; // par défaut 10%
+      if (delivery.role === "admin") commissionRate = 0; // ✅ admin exempté
+
+      const commission = (delivery.amount * commissionRate) / 100;
+      const netAmount = delivery.amount - commission;
+
+      // Mise à jour de la livraison en "confirmed"
+      await db.none(
+        `UPDATE freelance_deliveries
+         SET status = 'confirmed', confirmed_at = NOW(), updated_at = NOW()
+         WHERE id = $1`,
+        [delivery.id]
+      );
+
+      // Créditer le vendeur
+      await db.none(
+        `UPDATE sellers
+         SET balance = balance + $1
+         WHERE id = $2`,
+        [netAmount, delivery.seller_id]
+      );
+
+      console.log(`✅ Livraison ${delivery.id} confirmée automatiquement, fonds libérés.`);
     }
   } catch (err) {
     console.error("❌ Erreur cron autoConfirmFreelance:", err.message);
