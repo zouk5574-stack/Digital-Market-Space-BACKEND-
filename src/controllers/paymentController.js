@@ -1,55 +1,34 @@
-import axios from "axios";
-import dotenv from "dotenv";
+import { query } from '../config/db.js';
+import { createCheckout } from '../config/fedapay.js';
+import { toCents } from '../utils/helpers.js';
 
-dotenv.config();
-
-const fedapay = axios.create({
-  baseURL: process.env.FEDAPAY_API_URL,
-  headers: {
-    Authorization: `Bearer ${process.env.FEDAPAY_PAYMENT_KEY}`,
-    "Content-Type": "application/json"
-  }
-});
-
-// 👉 Créer un paiement
-export const createPayment = async (req, res) => {
+export async function createPayment(req, res) {
   try {
-    const { amount, currency, description, customer_email } = req.body;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    const { order_id } = req.body;
+    if (!order_id) return res.status(400).json({ error: 'order_id required' });
 
-    const response = await fedapay.post("/transactions", {
-      description,
-      amount,
-      currency, // ex: "XOF"
-      callback_url: "https://ton-site.com/payment/callback",
-      customer: {
-        email: customer_email
-      }
-    });
+    const or = await query('SELECT * FROM orders WHERE id=$1', [order_id]);
+    if (!or.rows[0]) return res.status(404).json({ error: 'Order not found' });
+    const order = or.rows[0];
 
-    res.status(201).json({
-      success: true,
-      payment_url: response.data.transaction.url,
-      transaction_id: response.data.transaction.id
-    });
-  } catch (error) {
-    console.error("Fedapay Error:", error.response?.data || error.message);
-    res.status(500).json({ success: false, error: "Payment creation failed" });
+    // create transaction
+    const txRes = await query('INSERT INTO transactions (order_id, buyer_id, seller_id, amount, currency, status) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *', [order.id, order.buyer_id, null, order.total_amount, order.currency, 'pending']);
+    const tx = txRes.rows[0];
+
+    // create Fedapay checkout
+    const amountCents = toCents(order.total_amount);
+    const checkout = await createCheckout(amountCents, order.currency, { order_id: order.id, transaction_id: tx.id });
+
+    // save fedapay id if present
+    if (checkout && checkout.id) {
+      await query('UPDATE transactions SET fedapay_payment_id=$1 WHERE id=$2', [checkout.id, tx.id]);
+    }
+
+    res.json({ transaction: tx, checkout });
+  } catch (err) {
+    console.error('createPayment', err);
+    res.status(500).json({ error: 'Server error' });
   }
-};
-
-// 👉 Vérifier le statut d’un paiement
-export const checkPaymentStatus = async (req, res) => {
-  try {
-    const { transactionId } = req.params;
-
-    const response = await fedapay.get(`/transactions/${transactionId}`);
-
-    res.status(200).json({
-      success: true,
-      status: response.data.transaction.status
-    });
-  } catch (error) {
-    console.error("Fedapay Status Error:", error.response?.data || error.message);
-    res.status(500).json({ success: false, error: "Failed to check payment status" });
-  }
-};
+}
