@@ -7,6 +7,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import freelanceServiceRoutes from "./routes/freelanceServiceRoutes.js";
 import freelanceOrderRoutes from "./routes/freelanceOrderRoutes.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
+import "./cron/autoConfirmFreelance.js";
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/freelance/services", freelanceServiceRoutes);
 app.use("/api/freelance/orders", freelanceOrderRoutes);
