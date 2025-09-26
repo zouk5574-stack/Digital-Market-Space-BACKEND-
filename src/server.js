@@ -14,7 +14,22 @@ import productRoutes from "./routes/user/productRoutes.js";
 import orderRoutes from "./routes/user/orderRoutes.js";
 
 import transactionRoutes from "./routes/transactionRoutes.js";
+import express from "express";
+import cors from "cors";
 
+const app = express();
+
+// Autoriser toutes les origines (tu peux restreindre si besoin)
+app.use(cors());
+
+app.get("/", (req, res) => {
+  res.send("API en ligne ✅");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
+});
 dotenv.config();
 const app = express();
 
