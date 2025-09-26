@@ -1,38 +1,27 @@
 import pool from "../config/db.js";
 
 /**
- * ✅ Récupérer les paramètres actuels
+ * Récupérer les paramètres globaux
  */
-export const getSettings = async (req, res) => {
+export const getAdminSettings = async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT auto_confirm_delay_hours, auto_withdraw_delay_hours, updated_at FROM admin_settings LIMIT 1"
-    );
-
+    const result = await pool.query("SELECT * FROM admin_settings LIMIT 1");
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Paramètres introuvables" });
+      return res.status(404).json({ error: "Paramètres non trouvés" });
     }
-
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Erreur getSettings:", err.message);
+    console.error("Erreur getAdminSettings:", err.message);
     res.status(500).json({ error: "Erreur serveur" });
   }
 };
 
 /**
- * ✅ Mettre à jour les paramètres
+ * Mettre à jour les délais (auto-confirmation, auto-retrait)
  */
-export const updateSettings = async (req, res) => {
+export const updateAdminSettings = async (req, res) => {
   try {
     const { auto_confirm_delay_hours, auto_withdraw_delay_hours } = req.body;
-
-    if (
-      (auto_confirm_delay_hours && (isNaN(auto_confirm_delay_hours) || auto_confirm_delay_hours < 1)) ||
-      (auto_withdraw_delay_hours && (isNaN(auto_withdraw_delay_hours) || auto_withdraw_delay_hours < 1))
-    ) {
-      return res.status(400).json({ error: "Valeurs invalides" });
-    }
 
     const result = await pool.query(
       `UPDATE admin_settings
@@ -40,13 +29,13 @@ export const updateSettings = async (req, res) => {
          auto_confirm_delay_hours = COALESCE($1, auto_confirm_delay_hours),
          auto_withdraw_delay_hours = COALESCE($2, auto_withdraw_delay_hours),
          updated_at = NOW()
-       RETURNING auto_confirm_delay_hours, auto_withdraw_delay_hours, updated_at`,
+       RETURNING *`,
       [auto_confirm_delay_hours, auto_withdraw_delay_hours]
     );
 
     res.json({ success: true, settings: result.rows[0] });
   } catch (err) {
-    console.error("Erreur updateSettings:", err.message);
+    console.error("Erreur updateAdminSettings:", err.message);
     res.status(500).json({ error: "Erreur serveur" });
   }
 };
