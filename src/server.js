@@ -8,6 +8,8 @@ import freelanceServiceRoutes from "./routes/freelanceServiceRoutes.js";
 import freelanceOrderRoutes from "./routes/freelanceOrderRoutes.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
 import "./cron/autoConfirmFreelance.js";
+import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
+app.use("/api/freelance", freelanceDeliveryRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/freelance/services", freelanceServiceRoutes);
 app.use("/api/freelance/orders", freelanceOrderRoutes);
