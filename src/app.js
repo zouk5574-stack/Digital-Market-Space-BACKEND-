@@ -13,6 +13,8 @@ import paymentRoutes from './routes/paymentRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import notificationRoutes from "./routes/notificationRoutes.js";
+
 
 dotenv.config();
 
@@ -43,7 +45,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/settings', settingsRoutes);
-
+app.use("/api/notifications", notificationRoutes);
 // error handler
 app.use(errorHandler);
 
