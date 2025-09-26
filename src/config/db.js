@@ -1,19 +1,26 @@
-import pg from 'pg';
-import dotenv from 'dotenv';
+// src/config/db.js
+import pg from "pg";
+import dotenv from "dotenv";
+
 dotenv.config();
 
 const { Pool } = pg;
 
+// Vérification
 if (!process.env.DATABASE_URL) {
-  console.error('DATABASE_URL not set in env');
+  console.error("❌ DATABASE_URL manquant dans .env");
   process.exit(1);
 }
 
+// Connexion au pool PostgreSQL (Supabase)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: Number(process.env.PG_MAX_CLIENTS || 10),
-  ssl: { rejectUnauthorized: false }
+  ssl: {
+    rejectUnauthorized: false, // ⚠️ nécessaire pour Supabase
+  },
 });
 
+// Helper pour requêtes rapides
 export const query = (text, params) => pool.query(text, params);
+
 export default pool;
