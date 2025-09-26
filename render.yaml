@@ -1,0 +1,18 @@
+version: "1"
+services:
+  - type: web
+    name: Digital-Market-Space-officiel
+    runtime: node
+    repo: https://github.com/zouk5574-stack/Digital-Market-Space-BACKEND-
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: node src/server.js
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PORT
+        value: 10000
