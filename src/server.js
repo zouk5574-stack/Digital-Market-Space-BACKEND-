@@ -10,6 +10,10 @@ import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
 import "./cron/autoConfirmFreelance.js";
 import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
 import "./cron/autoConfirmFreelance.js";
+import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
+
+// ...
+app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/freelance", freelanceDeliveryRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/freelance/services", freelanceServiceRoutes);
