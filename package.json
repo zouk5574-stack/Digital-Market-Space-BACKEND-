@@ -2,11 +2,13 @@
   "name": "digital-market-space-backend",
   "version": "1.0.0",
   "description": "Backend officiel de Digital Market Space - Marketplace moderne avec paiements Fedapay",
+  "type": "module",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    
+    "vercel-build": "echo 'Vercel build OK'"
+  },
   "keywords": [
     "marketplace",
     "backend",
@@ -14,7 +16,7 @@
     "express",
     "supabase",
     "fedapay",
-    "render"
+    "vercel"
   ],
   "author": "AFFO Marzouck",
   "license": "MIT",
@@ -32,6 +34,6 @@
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": "18.x"
   }
 }
