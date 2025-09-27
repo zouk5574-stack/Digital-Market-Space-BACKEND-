@@ -1,7 +1,22 @@
-const express = require("express");
+/**
+ * src/routes/authRoutes.js
+ *
+ * Routes pour l’authentification des utilisateurs
+ */
+
+import express from "express";
+import { registerUser, loginUser, getProfile } from "../controllers/authController.js";
+import { auth } from "../middleware/auth.js";
+
 const router = express.Router();
-const authController = require("../controllers/authController");
 
-router.post("/admin/login", authController.loginAdmin);
+// Inscription
+router.post("/register", registerUser);
 
-module.exports = router;
+// Connexion
+router.post("/login", loginUser);
+
+// Profil utilisateur connecté
+router.get("/me", auth, getProfile);
+
+export default router;
