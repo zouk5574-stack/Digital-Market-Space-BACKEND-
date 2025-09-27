@@ -1,7 +1,7 @@
-version: "1"
+# render.yaml
 services:
   - type: web
-    name: Digital-Market-Space-officiel
+    name: digital-market-space
     runtime: node
     repo: https://github.com/zouk5574-stack/Digital-Market-Space-BACKEND-
     plan: free
