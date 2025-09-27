@@ -1,165 +1,78 @@
 import express from "express";
-import multer from "multer";
-import path from "path";
+import upload from "../middleware/upload.js";
+import { auth } from "../middleware/auth.js";
+import pool from "../config/db.js";
 import fs from "fs";
-import db from "../config/db.js"; // ⚡ Connexion PostgreSQL
 
 const router = express.Router();
 
-// 📂 Middleware pour vérifier le vendorId
-function checkVendor(req, res, next) {
-  const { vendorId } = req.query;
-  if (!vendorId) {
-    return res.status(400).json({
-      success: false,
-      message: "vendorId est requis ❌"
-    });
+// ✅ Upload multiple illimité (images/vidéos/documents)
+router.post("/multiple", auth, upload.array("files"), async (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: "Aucun fichier reçu" });
   }
-
-  const vendorPath = path.join("uploads", vendorId);
-  if (!fs.existsSync(vendorPath)) {
-    fs.mkdirSync(vendorPath, { recursive: true });
-  }
-
-  req.vendorPath = vendorPath;
-  req.vendorId = vendorId;
-  next();
-}
-
-// 📂 Config Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, req.vendorPath);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
-
-// 🔒 Sécurité
-const upload = multer({
-  storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const filetypes = /jpeg|jpg|png|gif|mp4|mov|avi|mkv|pdf/;
-    const extname = filetypes.test(
-      path.extname(file.originalname).toLowerCase()
-    );
-    if (extname) cb(null, true);
-    else cb(new Error("Format non supporté ❌"));
-  },
-});
-
-// 📂 Fonction utilitaire → détecter type
-function detectFileType(filename) {
-  const ext = path.extname(filename).toLowerCase();
-  if ([".jpg", ".jpeg", ".png", ".gif"].includes(ext)) return "image";
-  if ([".mp4", ".mov", ".avi", ".mkv"].includes(ext)) return "video";
-  if ([".pdf"].includes(ext)) return "document";
-  return "autre";
-}
-
-// ✅ Upload 1 fichier
-router.post("/upload", checkVendor, upload.single("file"), async (req, res) => {
-  const fileUrl = `/uploads/${req.vendorId}/${req.file.filename}`;
-  const fileType = detectFileType(req.file.filename);
 
   try {
-    await db.none(
-      "INSERT INTO uploads(vendor_id, filename, url, type) VALUES($1, $2, $3, $4)",
-      [req.vendorId, req.file.filename, fileUrl, fileType]
-    );
+    const savedFiles = [];
 
-    res.json({
-      success: true,
-      message: "Fichier uploadé et enregistré 🎉",
-      file: req.file,
-      url: fileUrl,
-      type: fileType
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Erreur DB", error: err.message });
-  }
-});
+    for (const file of req.files) {
+      const result = await pool.query(
+        `INSERT INTO uploads (user_id, filename, mimetype, path, size, type, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         RETURNING *`,
+        [
+          req.user.id,
+          file.filename,
+          file.mimetype,
+          file.path,
+          file.size,
+          file.mimetype.startsWith("video/") ? "video" : "image",
+        ]
+      );
 
-// ✅ Upload plusieurs fichiers
-router.post("/uploads", checkVendor, upload.array("files", 10), async (req, res) => {
-  const filesData = req.files.map(f => ({
-    filename: f.filename,
-    url: `/uploads/${req.vendorId}/${f.filename}`,
-    type: detectFileType(f.filename)
-  }));
-
-  try {
-    const queries = filesData.map(f =>
-      db.none(
-        "INSERT INTO uploads(vendor_id, filename, url, type) VALUES($1, $2, $3, $4)",
-        [req.vendorId, f.filename, f.url, f.type]
-      )
-    );
-    await Promise.all(queries);
-
-    res.json({
-      success: true,
-      message: "Fichiers uploadés et enregistrés 🎉",
-      files: filesData,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Erreur DB", error: err.message });
-  }
-});
-
-// ✅ Lister fichiers d’un vendeur
-router.get("/uploads/list", checkVendor, async (req, res) => {
-  try {
-    const files = await db.any(
-      "SELECT id, filename, url, type, created_at FROM uploads WHERE vendor_id = $1 ORDER BY created_at DESC",
-      [req.vendorId]
-    );
-
-    res.json({
-      success: true,
-      vendorId: req.vendorId,
-      count: files.length,
-      files,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Erreur DB", error: err.message });
-  }
-});
-
-// ✅ Supprimer un fichier (DB + disque)
-router.delete("/uploads/:filename", checkVendor, async (req, res) => {
-  const filePath = path.join(req.vendorPath, req.params.filename);
-
-  try {
-    const result = await db.result(
-      "DELETE FROM uploads WHERE vendor_id = $1 AND filename = $2",
-      [req.vendorId, req.params.filename]
-    );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Fichier introuvable dans la base ❌"
-      });
+      savedFiles.push(result.rows[0]);
     }
 
-    fs.unlink(filePath, (err) => {
-      if (err) {
-        return res.status(404).json({
-          success: false,
-          message: "Fichier introuvable sur le disque ❌"
-        });
-      }
-
-      res.json({
-        success: true,
-        message: `Fichier ${req.params.filename} supprimé avec succès 🗑️`
-      });
+    res.json({
+      success: true,
+      message: "Fichiers uploadés et enregistrés en base 🎉",
+      files: savedFiles,
     });
-  } catch (err) {
-    res.status(500).json({ success: false, message: "Erreur DB", error: err.message });
+  } catch (error) {
+    console.error("Erreur upload:", error);
+    res.status(500).json({ error: "Erreur lors de l’upload" });
+  }
+});
+
+// ✅ Supprimer un fichier (par le vendeur lui-même)
+router.delete("/:id", auth, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Vérifie si le fichier appartient à l’utilisateur
+    const result = await pool.query(
+      `SELECT * FROM uploads WHERE id = $1 AND user_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Fichier non trouvé ou non autorisé" });
+    }
+
+    const file = result.rows[0];
+
+    // Supprimer du système de fichiers
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    // Supprimer de la base
+    await pool.query(`DELETE FROM uploads WHERE id = $1`, [id]);
+
+    res.json({ success: true, message: "Fichier supprimé avec succès ✅" });
+  } catch (error) {
+    console.error("Erreur suppression fichier:", error);
+    res.status(500).json({ error: "Erreur lors de la suppression du fichier" });
   }
 });
 
