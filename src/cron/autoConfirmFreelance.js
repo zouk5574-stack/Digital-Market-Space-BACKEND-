@@ -1,15 +1,20 @@
 import cron from "node-cron";
 import db from "../config/db.js";
 
-// ✅ Chaque heure : vérifie freelances non confirmées
 cron.schedule("0 * * * *", async () => {
   console.log("⏳ Vérification des livraisons freelance non confirmées...");
 
   try {
     const settings = await db.oneOrNone(
-      "SELECT confirmation_delay_hours FROM admin_settings LIMIT 1"
+      "SELECT confirmation_delay_hours, auto_confirm_freelance FROM admin_settings LIMIT 1"
     );
-    const delay = settings ? settings.confirmation_delay_hours : 38;
+
+    if (!settings?.auto_confirm_freelance) {
+      console.log("⚠️ Auto-confirmation freelance désactivée par l'admin.");
+      return;
+    }
+
+    const delay = settings.confirmation_delay_hours || 38;
 
     const deliveries = await db.manyOrNone(
       `SELECT fd.*, fo.buyer_id, fo.amount, fo.seller_id, u.role
