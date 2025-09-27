@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "vercel-build": "echo 'Vercel build OK'"
-  },
+    
   "keywords": [
     "marketplace",
     "backend",
@@ -15,7 +14,7 @@
     "express",
     "supabase",
     "fedapay",
-    "vercel"
+    "render"
   ],
   "author": "AFFO Marzouck",
   "license": "MIT",
