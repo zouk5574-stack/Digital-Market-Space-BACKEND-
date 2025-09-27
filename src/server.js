@@ -28,6 +28,7 @@ import freelanceServiceRoutes from "./routes/freelanceServiceRoutes.js";
 import freelanceOrderRoutes from "./routes/freelanceOrderRoutes.js";
 import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
+import uploadRoutes from "./routes/uploadRoutes.js";  // ⬅️ nouvelle route upload
 
 // Cron jobs (sécurisés par variables env)
 import "./cron/maintenance.js";
@@ -40,6 +41,7 @@ app.use("/api/freelance/services", freelanceServiceRoutes);
 app.use("/api/freelance/orders", freelanceOrderRoutes);
 app.use("/api/freelance/delivery", freelanceDeliveryRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
+app.use("/api", uploadRoutes); // ⬅️ ajoute toutes les routes d’upload sous /api
 
 // === Lancer le serveur ===
 const PORT = process.env.PORT || 5000;
