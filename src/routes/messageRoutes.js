@@ -1,24 +1,26 @@
+/**
+ * src/routes/messageRoutes.js
+ *
+ * Routes pour la messagerie liée aux commandes freelance
+ */
+
 import express from "express";
-import { auth } from "../middleware/auth.js";
 import {
   sendMessage,
-  getConversation,
-  getInbox,
-  markAsRead
+  getMessagesByOrder,
+  markAsRead,
 } from "../controllers/messageController.js";
+import { auth } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Envoyer un message
+// ✅ Envoyer un message lié à une commande freelance
 router.post("/", auth, sendMessage);
 
-// Récupérer la conversation avec un utilisateur
-router.get("/conversation/:userId", auth, getConversation);
+// ✅ Récupérer tous les messages d’une commande
+router.get("/:orderId", auth, getMessagesByOrder);
 
-// Inbox (messages reçus)
-router.get("/inbox", auth, getInbox);
-
-// Marquer comme lu
-router.put("/:id/read", auth, markAsRead);
+// ✅ Marquer un message comme lu
+router.put("/:messageId/read", auth, markAsRead);
 
 export default router;
