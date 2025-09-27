@@ -23,31 +23,28 @@ app.get("/", (req, res) => {
   res.send("✅ Backend Digital Market Space en ligne !");
 });
 
-// Exemple route API
-app.get("/api/hello", (req, res) => {
-  res.json({ message: "Bienvenue sur ton API 🚀" });
-});
-
 // === Importer les routes ===
-import notificationRoutes from "./routes/notificationRoutes.js";
-import freelanceServiceRoutes from "./routes/freelanceServiceRoutes.js";
-import freelanceOrderRoutes from "./routes/freelanceOrderRoutes.js";
-import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
-import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
-import uploadRoutes from "./routes/uploadRoutes.js";  
+import utilisateurRoutes from "./routes/utilisateurRoutes.js";
+import produitRoutes from "./routes/produitRoutes.js";
+import commandeRoutes from "./routes/commandeRoutes.js"; // remplace "orders"
+import livraisonRoutes from "./routes/livraisonRoutes.js";
+import paiementRoutes from "./routes/paiementRoutes.js"; // nouvelle table paiements
+import uploadRoutes from "./routes/uploadRoutes.js";
+import messageRoutes from "./routes/messageRoutes.js";
 
-// Cron jobs (sécurisés par variables env)
+// Cron jobs
 import "./cron/maintenance.js";
 import "./jobs/cleanupNotifications.js";
 import "./cron/autoConfirmFreelance.js";
 
 // === Utiliser les routes ===
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/freelance/services", freelanceServiceRoutes);
-app.use("/api/freelance/orders", freelanceOrderRoutes);
-app.use("/api/freelance/delivery", freelanceDeliveryRoutes);
-app.use("/api/admin/settings", adminSettingsRoutes);
-app.use("/api", uploadRoutes); 
+app.use("/api/utilisateurs", utilisateurRoutes);
+app.use("/api/produits", produitRoutes);
+app.use("/api/commandes", commandeRoutes); // commandes_freelance
+app.use("/api/livraisons", livraisonRoutes);
+app.use("/api/paiements", paiementRoutes);
+app.use("/api/uploads", uploadRoutes);
+app.use("/api/messages", messageRoutes);
 
 // === Lancer le serveur ===
 const PORT = process.env.PORT || 5000;
