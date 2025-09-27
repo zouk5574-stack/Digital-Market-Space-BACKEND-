@@ -5,8 +5,8 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/server.js",
-    "start": "node src/server.js",
+    "dev": "nodemon server.js",
+    "start": "node server.js",
     "vercel-build": "echo 'Vercel build OK'"
   },
   "keywords": [
