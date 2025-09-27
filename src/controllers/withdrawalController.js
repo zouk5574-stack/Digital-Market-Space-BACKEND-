@@ -1,84 +1,108 @@
-import { query } from '../config/db.js';
-import { createPayout } from '../config/fedapay.js';
+import { query } from "../config/db.js";
 
-export async function requestWithdraw(req, res) {
+/**
+ * Demander un retrait
+ */
+export const requestWithdrawal = async (req, res) => {
   try {
-    const user = req.user;
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-    const { amount, currency = 'USD', provider_data } = req.body;
-    if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'Invalid amount' });
+    const { amount, payment_method } = req.body;
 
-    const b = await query('SELECT balance FROM users WHERE id=$1', [user.id]);
-    const bal = Number(b.rows[0]?.balance || 0);
-    if (bal < Number(amount)) return res.status(400).json({ error: 'Insufficient balance' });
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Montant invalide" });
+    }
 
-    // reserve funds immediately
-    await query('UPDATE users SET balance = balance - $1 WHERE id=$2', [amount, user.id]);
-    const w = await query('INSERT INTO withdrawals (seller_id, amount, currency, provider, status, requested_at) VALUES ($1,$2,$3,$4,$5,now()) RETURNING *', [user.id, amount, currency, 'fedapay', 'requested']);
+    if (!payment_method) {
+      return res.status(400).json({ message: "Méthode de paiement requise" });
+    }
 
-    // Optionally auto-create payout using createPayout(provider_data) depending on settings/verification
+    // Vérifier le solde disponible du vendeur
+    const salesRes = await query(
+      "SELECT SUM(total_amount) AS total_sales FROM orders WHERE seller_id = $1 AND status = 'paid'",
+      [req.user.id]
+    );
+    const totalSales = parseFloat(salesRes.rows[0].total_sales) || 0;
 
-    res.status(201).json({ withdrawal: w.rows[0] });
-  } catch (err) {
-    console.error('requestWithdraw', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-}
-    return res.json({ message: "Retrait approuvé", withdrawal: updated });
+    const withdrawalsRes = await query(
+      "SELECT SUM(amount) AS total_withdrawn FROM withdrawals WHERE user_id = $1 AND status = 'approved'",
+      [req.user.id]
+    );
+    const totalWithdrawn = parseFloat(withdrawalsRes.rows[0].total_withdrawn) || 0;
+
+    const availableBalance = totalSales - totalWithdrawn;
+
+    if (amount > availableBalance) {
+      return res.status(400).json({ message: "Solde insuffisant pour ce retrait" });
+    }
+
+    // Vérifier si l’admin a activé l’auto-confirmation
+    const settingsRes = await query("SELECT auto_withdrawals FROM admin_settings LIMIT 1");
+    const autoWithdrawals = settingsRes.rows[0]?.auto_withdrawals || false;
+
+    const status = autoWithdrawals ? "approved" : "pending";
+
+    const result = await query(
+      `INSERT INTO withdrawals (user_id, amount, payment_method, status)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, user_id, amount, payment_method, status, created_at`,
+      [req.user.id, amount, payment_method, status]
+    );
+
+    res.status(201).json({
+      message: autoWithdrawals
+        ? "Retrait automatiquement confirmé ✅"
+        : "Demande de retrait en attente ⏳",
+      withdrawal: result.rows[0],
+    });
   } catch (error) {
-    console.error("Erreur approveWithdrawal:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur demande retrait :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
 /**
- * Exécuter le paiement via Fedapay
+ * Voir mes retraits
  */
-exports.processWithdrawal = async (req, res) => {
-  const { withdrawal_id } = req.body;
-
+export const getMyWithdrawals = async (req, res) => {
   try {
-    const withdrawal = await db.oneOrNone(
-      "SELECT * FROM withdrawals WHERE id = $1",
-      [withdrawal_id]
+    const result = await query(
+      "SELECT id, amount, payment_method, status, created_at FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC",
+      [req.user.id]
     );
 
-    if (!withdrawal) {
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erreur récupération retraits :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * Admin : approuver ou rejeter un retrait manuellement
+ */
+export const updateWithdrawalStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Statut invalide" });
+    }
+
+    const result = await query(
+      "UPDATE withdrawals SET status = $1 WHERE id = $2 RETURNING *",
+      [status, id]
+    );
+
+    if (result.rows.length === 0) {
       return res.status(404).json({ message: "Retrait introuvable" });
     }
 
-    if (withdrawal.status !== "approved") {
-      return res.status(400).json({ message: "Le retrait doit être approuvé avant exécution" });
-    }
-
-    // ⚡ Appel API Fedapay
-    const transaction = await fedapay.Transaction.create({
-      description: `Retrait vendeur #${withdrawal.seller_id}`,
-      amount: withdrawal.amount,
-      currency: "XOF",
-      customer: {
-        // Infos vendeur (numéro, email, nom, etc.)
-        email: "vendeur@example.com",
-      },
-      callback_url: process.env.FEDAPAY_CALLBACK_URL,
+    res.json({
+      message: `Retrait ${status}`,
+      withdrawal: result.rows[0],
     });
-
-    // Vérifier la réponse
-    if (!transaction || !transaction.id) {
-      return res.status(500).json({ message: "Échec du paiement Fedapay" });
-    }
-
-    // Mettre à jour en paid
-    const updated = await db.one(
-      `UPDATE withdrawals
-       SET status = 'paid', processed_at = NOW(), transaction_ref = $2
-       WHERE id = $1 RETURNING *`,
-      [withdrawal_id, transaction.id]
-    );
-
-    return res.json({ message: "Retrait payé avec succès", withdrawal: updated });
   } catch (error) {
-    console.error("Erreur processWithdrawal:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur mise à jour retrait :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
