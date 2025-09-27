@@ -10,6 +10,7 @@ import {
   getMyWithdrawals,
   getAllWithdrawals,
   updateWithdrawalStatus,
+  confirmWithdrawal,
 } from "../controllers/withdrawalController.js";
 
 import { auth } from "../middleware/auth.js";
@@ -17,16 +18,31 @@ import { authAdmin } from "../middleware/authAdmin.js";
 
 const router = express.Router();
 
-// ✅ Utilisateur : demander un retrait
+/**
+ * ========================
+ *   ROUTES UTILISATEUR & ADMIN
+ * ========================
+ */
+
+// ✅ Demander un retrait (utilisateur ou admin)
 router.post("/", auth, requestWithdrawal);
 
-// ✅ Utilisateur : voir ses retraits
+// ✅ Voir mes retraits (utilisateur ou admin)
 router.get("/me", auth, getMyWithdrawals);
 
-// ✅ Admin : voir toutes les demandes
+/**
+ * ========================
+ *   ROUTES ADMIN UNIQUEMENT
+ * ========================
+ */
+
+// ✅ Voir toutes les demandes de retraits
 router.get("/", authAdmin, getAllWithdrawals);
 
-// ✅ Admin : changer le statut d’un retrait
+// ✅ Changer le statut (approved/rejected) → si auto_withdrawals = false
 router.put("/:id/status", authAdmin, updateWithdrawalStatus);
+
+// ✅ Confirmer manuellement un retrait (si besoin)
+router.put("/:id/confirm", authAdmin, confirmWithdrawal);
 
 export default router;
