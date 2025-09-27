@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import fs from "fs";
 
 // Charger les variables d'environnement
 dotenv.config();
@@ -11,6 +12,11 @@ const app = express();
 // Middlewares
 app.use(cors());
 app.use(express.json());
+
+// ✅ Créer le dossier uploads s'il n'existe pas
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
+}
 
 // ✅ Route par défaut (Render checke / automatiquement)
 app.get("/", (req, res) => {
@@ -28,7 +34,7 @@ import freelanceServiceRoutes from "./routes/freelanceServiceRoutes.js";
 import freelanceOrderRoutes from "./routes/freelanceOrderRoutes.js";
 import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
 import adminSettingsRoutes from "./routes/adminSettingsRoutes.js";
-import uploadRoutes from "./routes/uploadRoutes.js";  // ⬅️ nouvelle route upload
+import uploadRoutes from "./routes/uploadRoutes.js";  
 
 // Cron jobs (sécurisés par variables env)
 import "./cron/maintenance.js";
@@ -41,7 +47,7 @@ app.use("/api/freelance/services", freelanceServiceRoutes);
 app.use("/api/freelance/orders", freelanceOrderRoutes);
 app.use("/api/freelance/delivery", freelanceDeliveryRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
-app.use("/api", uploadRoutes); // ⬅️ ajoute toutes les routes d’upload sous /api
+app.use("/api", uploadRoutes); 
 
 // === Lancer le serveur ===
 const PORT = process.env.PORT || 5000;
