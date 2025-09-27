@@ -1,18 +1,16 @@
 import cron from "node-cron";
 import db from "../config/db.js";
 
-// ✅ Chaque heure, vérifie les livraisons non confirmées
+// ✅ Chaque heure : vérifie freelances non confirmées
 cron.schedule("0 * * * *", async () => {
   console.log("⏳ Vérification des livraisons freelance non confirmées...");
 
   try {
-    // Récupérer le délai configuré (par défaut 38h)
     const settings = await db.oneOrNone(
       "SELECT confirmation_delay_hours FROM admin_settings LIMIT 1"
     );
     const delay = settings ? settings.confirmation_delay_hours : 38;
 
-    // Sélectionner les livraisons "delivered" mais pas confirmées depuis + delay heures
     const deliveries = await db.manyOrNone(
       `SELECT fd.*, fo.buyer_id, fo.amount, fo.seller_id, u.role
        FROM freelance_deliveries fd
@@ -24,13 +22,12 @@ cron.schedule("0 * * * *", async () => {
     );
 
     for (const delivery of deliveries) {
-      let commissionRate = 10; // par défaut 10%
-      if (delivery.role === "admin") commissionRate = 0; // ✅ admin exempté
+      let commissionRate = 10;
+      if (delivery.role === "admin") commissionRate = 0;
 
       const commission = (delivery.amount * commissionRate) / 100;
       const netAmount = delivery.amount - commission;
 
-      // Mise à jour de la livraison en "confirmed"
       await db.none(
         `UPDATE freelance_deliveries
          SET status = 'confirmed', confirmed_at = NOW(), updated_at = NOW()
@@ -38,7 +35,6 @@ cron.schedule("0 * * * *", async () => {
         [delivery.id]
       );
 
-      // Créditer le vendeur
       await db.none(
         `UPDATE sellers
          SET balance = balance + $1
@@ -46,7 +42,7 @@ cron.schedule("0 * * * *", async () => {
         [netAmount, delivery.seller_id]
       );
 
-      console.log(`✅ Livraison ${delivery.id} confirmée automatiquement, fonds libérés.`);
+      console.log(`✅ Livraison freelance ${delivery.id} confirmée automatiquement.`);
     }
   } catch (err) {
     console.error("❌ Erreur cron autoConfirmFreelance:", err.message);
