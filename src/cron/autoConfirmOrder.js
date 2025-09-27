@@ -1,15 +1,20 @@
 import cron from "node-cron";
 import db from "../config/db.js";
 
-// ✅ Chaque heure : vérifie les commandes produits non confirmées
 cron.schedule("30 * * * *", async () => {
   console.log("⏳ Vérification des commandes produits non confirmées...");
 
   try {
     const settings = await db.oneOrNone(
-      "SELECT confirmation_delay_hours FROM admin_settings LIMIT 1"
+      "SELECT confirmation_delay_hours, auto_confirm_orders FROM admin_settings LIMIT 1"
     );
-    const delay = settings ? settings.confirmation_delay_hours : 38;
+
+    if (!settings?.auto_confirm_orders) {
+      console.log("⚠️ Auto-confirmation commandes désactivée par l'admin.");
+      return;
+    }
+
+    const delay = settings.confirmation_delay_hours || 38;
 
     const orders = await db.manyOrNone(
       `SELECT o.*, u.role
