@@ -27,6 +27,6 @@ services:
   plan: free
   region: oregon
   buildCommand: 'npm install'
-  startCommand: 'node src/server.js'
+  startCommand: 'node server.js'
   autoDeployTrigger: 'commit'
   
