@@ -5,8 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
+    "start": "server.js",
+    "dev": "nodemon server.js",
     "lint": "eslint .",
     "test": "echo \"No tests specified\" && exit 0",
     "clean": "rm -rf node_modules dist"
@@ -31,6 +31,5 @@
     "marketplace",
     "render"
   ],
-  "author": "Youssef",
   "license": "MIT"
 }
