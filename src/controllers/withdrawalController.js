@@ -232,22 +232,112 @@ export const confirmWithdrawal = async (req, res) => {
        SET status = 'confirmed', confirmed_at = NOW()
        WHERE id = $1 AND status = 'pending'
        RETURNING *`,
-      [id]
-    );
+// src/controllers/withdrawalController.js
+import db from "../config/db.js";
+import { toCents } from "../utils/money.js";
+import cron from "node-cron";
 
-    if (result.rows.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Retrait introuvable ou déjà confirmé" });
+/**
+ * 💸 Demande de retrait utilisateur
+ */
+export const requestWithdrawal = async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { amount, payment_method } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Montant invalide" });
+    }
+    if (!payment_method) {
+      return res.status(400).json({ message: "Méthode de paiement requise" });
     }
 
-    res.json({ success: true, withdrawal: result.rows[0] });
+    const balanceRes = await db.query(
+      `SELECT balance FROM wallets WHERE user_id = $1`,
+      [userId]
+    );
+
+    if (balanceRes.rows.length === 0) {
+      return res.status(400).json({ message: "Portefeuille introuvable" });
+    }
+
+    const balance = Number(balanceRes.rows[0].balance);
+    const amountCents = toCents(amount);
+
+    if (balance < amountCents) {
+      return res.status(400).json({ message: "Solde insuffisant" });
+    }
+
+    // Vérifier auto_withdrawals
+    const settings = await db.query(`SELECT auto_withdrawals FROM settings LIMIT 1`);
+    const autoWithdrawals = settings.rows[0]?.auto_withdrawals;
+
+    const status = autoWithdrawals ? "approved" : "pending";
+
+    // Débiter immédiatement
+    await db.query(
+      `UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`,
+      [amountCents, userId]
+    );
+
+    // Créer la demande
+    const withdrawal = await db.query(
+      `INSERT INTO withdrawals (user_id, amount, payment_method, status, created_at, confirmed_at)
+       VALUES ($1, $2, $3, $4, NOW(), $5) RETURNING *`,
+      [userId, amountCents, payment_method, status, autoWithdrawals ? "NOW()" : null]
+    );
+
+    res.json({
+      success: true,
+      withdrawal: withdrawal.rows[0],
+      autoConfirmed: autoWithdrawals,
+    });
   } catch (err) {
-    res.status(500).json({ message: "Erreur confirmation retrait" });
+    console.error("❌ Erreur retrait utilisateur :", err);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
-// ✅ Admin : mise à jour du statut d’un retrait (si auto_withdrawals = false)
+/**
+ * 👤 Voir mes retraits
+ */
+export const getMyWithdrawals = async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const result = await db.query(
+      `SELECT id, amount, payment_method, status, created_at, confirmed_at
+       FROM withdrawals WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur getMyWithdrawals :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 👑 Admin : voir tous les retraits
+ */
+export const getAllWithdrawals = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT w.*, u.username 
+       FROM withdrawals w
+       JOIN users u ON w.user_id = u.id
+       ORDER BY w.created_at DESC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erreur getAllWithdrawals :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * 👑 Admin : mise à jour manuelle d’un retrait
+ */
 export const updateWithdrawalStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -257,16 +347,15 @@ export const updateWithdrawalStatus = async (req, res) => {
       return res.status(400).json({ message: "Statut invalide" });
     }
 
-    // Vérifier si auto_withdrawals est activé
     const settings = await db.query(`SELECT auto_withdrawals FROM settings LIMIT 1`);
     const autoWithdrawals = settings.rows[0]?.auto_withdrawals;
 
     if (autoWithdrawals) {
-      return res.status(403).json({ message: "⚠️ Mode auto_withdrawals activé, impossible de mettre à jour manuellement" });
+      return res.status(403).json({ message: "⚠️ Mode auto_withdrawals activé, pas de mise à jour manuelle possible" });
     }
 
     const result = await db.query(
-      "UPDATE withdrawals SET status = $1 WHERE id = $2 RETURNING *",
+      `UPDATE withdrawals SET status = $1, confirmed_at = NOW() WHERE id = $2 RETURNING *`,
       [status, id]
     );
 
@@ -278,18 +367,82 @@ export const updateWithdrawalStatus = async (req, res) => {
       message: `Retrait ${status} ✅`,
       withdrawal: result.rows[0],
     });
-  } catch (error) {
-    console.error("Erreur updateWithdrawalStatus :", error);
+  } catch (err) {
+    console.error("Erreur updateWithdrawalStatus :", err);
     res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
-// ⏰ Auto-confirmation après 1h30 min
+/**
+ * 👑 Admin : retirer ses propres fonds
+ */
+export const adminWithdrawal = async (req, res) => {
+  try {
+    const { amount, payment_method } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Montant invalide" });
+    }
+    if (!payment_method) {
+      return res.status(400).json({ message: "Méthode de paiement requise" });
+    }
+
+    const balanceRes = await db.query(
+      `SELECT balance FROM wallets WHERE user_id = $1`,
+      [req.user.id] // Admin connecté
+    );
+
+    if (balanceRes.rows.length === 0) {
+      return res.status(400).json({ message: "Portefeuille admin introuvable" });
+    }
+
+    const balance = Number(balanceRes.rows[0].balance);
+    const amountCents = toCents(amount);
+
+    if (balance < amountCents) {
+      return res.status(400).json({ message: "Solde admin insuffisant" });
+    }
+
+    // Débiter immédiatement
+    await db.query(
+      `UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`,
+      [amountCents, req.user.id]
+    );
+
+    // Retrait confirmé immédiatement
+    const withdrawalRes = await db.query(
+      `INSERT INTO withdrawals (user_id, amount, payment_method, status, created_at, confirmed_at)
+       VALUES ($1, $2, $3, 'approved', NOW(), NOW()) RETURNING *`,
+      [req.user.id, amountCents, payment_method]
+    );
+
+    const withdrawal = withdrawalRes.rows[0];
+
+    // Log transaction
+    await db.query(
+      `INSERT INTO transactions (user_id, type, amount, reference, created_at)
+       VALUES ($1, 'admin_withdrawal', $2, $3, NOW())`,
+      [req.user.id, withdrawal.amount, `ADMIN-WITHDRAW-${withdrawal.id}`]
+    );
+
+    res.json({
+      message: "Retrait admin confirmé ✅",
+      withdrawal,
+    });
+  } catch (err) {
+    console.error("❌ Erreur retrait admin :", err);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * ⏰ Auto-confirmation après 1h30
+ */
 cron.schedule("*/10 * * * *", async () => {
   try {
     const result = await db.query(
       `UPDATE withdrawals
-       SET status = 'confirmed', confirmed_at = NOW()
+       SET status = 'approved', confirmed_at = NOW()
        WHERE status = 'pending'
        AND created_at <= NOW() - INTERVAL '90 minutes'
        RETURNING id`
