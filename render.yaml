@@ -1,18 +1,18 @@
 # render.yaml
+version: "1"
 services:
   - type: web
-    name: digital-market-space
+    name: Digital-Market-Space-officiel
     runtime: node
-    repo: https://github.com/zouk5574-stack/Digital-Market-Space-BACKEND-
     plan: free
     region: oregon
-    buildCommand: npm install
-    startCommand: node src/server.js
+    buildCommand: "npm install"
+    startCommand: "npm start"
     autoDeploy: true
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET
-        sync: false
+        value: "Affom@rzouck13"
       - key: PORT
         value: 10000
