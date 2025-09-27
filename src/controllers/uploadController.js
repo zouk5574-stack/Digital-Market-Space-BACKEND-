@@ -2,6 +2,7 @@
 import db from "../config/db.js";
 import fs from "fs";
 import path from "path";
+import { assignCategory } from "../utils/categoryHelper.js"; // 🔥 Catégorisation auto
 
 // ➕ Upload fichier
 export const uploadFile = async (req, res) => {
@@ -13,10 +14,14 @@ export const uploadFile = async (req, res) => {
       return res.status(400).json({ message: "Aucun fichier reçu" });
     }
 
+    // Catégorisation automatique selon l'extension ou mimetype
+    const categoryId = await assignCategory(file.originalname);
+
     const result = await db.query(
-      `INSERT INTO uploads (user_id, file_name, file_type, file_path)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [userId, file.filename, file.mimetype, file.path]
+      `INSERT INTO uploads (user_id, file_name, file_type, file_path, category_id, created_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW() + INTERVAL '5 months')
+       RETURNING *`,
+      [userId, file.filename, file.mimetype, file.path, categoryId]
     );
 
     res.json({ success: true, file: result.rows[0] });
@@ -43,11 +48,12 @@ export const downloadFile = async (req, res) => {
     const file = result.rows[0];
     res.download(path.resolve(file.file_path), file.file_name);
   } catch (err) {
+    console.error("❌ Erreur téléchargement :", err);
     res.status(500).json({ message: "Erreur téléchargement" });
   }
 };
 
-// 🗑️ Auto-suppression fichiers expirés
+// 🗑️ Auto-suppression fichiers après expiration (5 mois)
 export const cleanupExpiredFiles = async () => {
   try {
     const expired = await db.query(
@@ -61,7 +67,9 @@ export const cleanupExpiredFiles = async () => {
     }
 
     await db.query(`DELETE FROM uploads WHERE expires_at <= NOW()`);
-    console.log("🧹 Nettoyage des fichiers expirés terminé");
+    if (expired.rows.length > 0) {
+      console.log(`🧹 ${expired.rows.length} fichier(s) supprimé(s) automatiquement`);
+    }
   } catch (err) {
     console.error("❌ Erreur cleanup :", err);
   }
