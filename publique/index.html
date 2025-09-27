@@ -1,1 +1,113 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digital Market Space</title>
 
+  <!-- Couleur de la barre d'adresse (Android Chrome) -->
+  <meta name="theme-color" content="#2a9d8f" />
+
+  <!-- iOS support -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Digital Market Space" />
+  <link rel="apple-touch-icon" href="/icons/logo-192.png" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Ton favicon -->
+  <link rel="icon" href="/icons/logo-192.png" type="image/png" />
+
+  <!-- Styles simples (tu peux remplacer par ton framework ou Tailwind) -->
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+    }
+    header {
+      background: #2a9d8f;
+      color: #fff;
+      padding: 1rem;
+      text-align: center;
+    }
+    header img {
+      width: 64px;
+      height: 64px;
+    }
+    main {
+      padding: 2rem;
+      text-align: center;
+    }
+    button.install {
+      background: #2a9d8f;
+      border: none;
+      padding: 1rem 2rem;
+      color: #fff;
+      font-size: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    footer {
+      margin-top: 2rem;
+      text-align: center;
+      font-size: 0.9rem;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/icons/logo-192.png" alt="Digital Market Space Logo" />
+    <h1>Digital Market Space</h1>
+  </header>
+
+  <main>
+    <p>Bienvenue sur <strong>Digital Market Space</strong>, votre marketplace digitale !</p>
+    <p>Ajoutez cette application à votre écran d’accueil pour une meilleure expérience.</p>
+    <button id="installBtn" class="install" style="display:none;">📲 Installer l'application</button>
+  </main>
+
+  <footer>
+    <p>&copy; 2025 Digital Market Space. Tous droits réservés.</p>
+  </footer>
+
+  <!-- Script pour PWA -->
+  <script>
+    // Enregistrer le service worker
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker
+          .register("/service-worker.js")
+          .then((reg) => {
+            console.log("✅ Service Worker enregistré :", reg.scope);
+          })
+          .catch((err) => {
+            console.error("❌ Erreur Service Worker :", err);
+          });
+      });
+    }
+
+    // Gestion du bouton "Installer"
+    let deferredPrompt;
+    const installBtn = document.getElementById("installBtn");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBtn.style.display = "inline-block";
+
+      installBtn.addEventListener("click", async () => {
+        installBtn.style.display = "none";
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(`Résultat installation : ${outcome}`);
+        deferredPrompt = null;
+      });
+    });
+  </script>
+</body>
+  </html>
