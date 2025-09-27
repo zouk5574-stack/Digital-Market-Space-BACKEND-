@@ -1,48 +1,105 @@
-const db = require("../config/db");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
+/**
+ * src/controllers/authController.js
+ *
+ * Gère l’authentification et la gestion des utilisateurs.
+ */
 
-// Connexion admin uniquement via téléphone
-exports.loginAdmin = async (req, res) => {
-  const { phone, password } = req.body;
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import pool, { query } from "../config/db.js";
 
+/**
+ * Inscription utilisateur
+ */
+export const registerUser = async (req, res) => {
   try {
-    // Chercher admin unique
-    const admin = await db.oneOrNone(
-      "SELECT * FROM users WHERE phone = $1 AND role = 'admin'",
-      [phone]
-    );
+    const { name, email, password, role } = req.body;
 
-    if (!admin) {
-      return res.status(401).json({ message: "Accès refusé : admin introuvable" });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Tous les champs sont requis" });
     }
 
-    // Vérifier mot de passe hashé
-    const isMatch = await bcrypt.compare(password, admin.password_hash);
-    if (!isMatch) {
+    // Vérifie si l’utilisateur existe déjà
+    const existing = await query("SELECT * FROM users WHERE email = $1", [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ message: "Cet email est déjà utilisé" });
+    }
+
+    // Hash du mot de passe
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Rôle par défaut = "user" sauf si explicitement défini (ex: vendeur)
+    const finalRole = role && ["user", "seller"].includes(role) ? role : "user";
+
+    const result = await query(
+      "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role",
+      [name, email, hashedPassword, finalRole]
+    );
+
+    res.status(201).json({
+      message: "Utilisateur créé avec succès",
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Erreur inscription :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * Connexion utilisateur
+ */
+export const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email et mot de passe requis" });
+    }
+
+    const userRes = await query("SELECT * FROM users WHERE email = $1", [email]);
+    const user = userRes.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
       return res.status(401).json({ message: "Mot de passe incorrect" });
     }
 
-    // Générer token JWT
+    // Génération du token JWT
     const token = jwt.sign(
-      { id: admin.id, role: admin.role },
+      { id: user.id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "12h" }
+      { expiresIn: "7d" }
     );
 
-    return res.json({
-      message: "Connexion admin réussie ✅",
+    res.json({
+      message: "Connexion réussie",
       token,
-      admin: {
-        id: admin.id,
-        nom: admin.nom,
-        prenom: admin.prenom,
-        phone: admin.phone,
-        role: admin.role
-      }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    console.error("Erreur loginAdmin:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur connexion :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * Profil utilisateur connecté
+ */
+export const getProfile = async (req, res) => {
+  try {
+    const userRes = await query(
+      "SELECT id, name, email, role, created_at FROM users WHERE id = $1",
+      [req.user.id]
+    );
+
+    res.json(userRes.rows[0]);
+  } catch (error) {
+    console.error("Erreur profil :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
