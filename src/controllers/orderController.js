@@ -1,102 +1,125 @@
-// src/controllers/orderController.js
-const db = require("../config/db");
+/**
+ * src/controllers/orderController.js
+ *
+ * Gestion des commandes (produits digitaux + freelance).
+ */
+
+import pool, { query } from "../config/db.js";
 
 /**
- * Créer une nouvelle commande après le paiement
+ * Créer une commande
  */
-exports.createOrder = async (req, res) => {
-  const { buyer_id, seller_id, product_id, amount } = req.body;
-
+export const createOrder = async (req, res) => {
   try {
-    // Récupérer le taux de commission depuis settings
-    const settings = await db.oneOrNone("SELECT commission_rate FROM settings LIMIT 1");
-    const commissionRate = settings ? settings.commission_rate : 10;
+    const { product_id, quantity } = req.body;
 
-    const commission = (amount * commissionRate) / 100;
-    const netAmount = amount - commission;
+    if (!product_id || !quantity) {
+      return res.status(400).json({ message: "Produit et quantité requis" });
+    }
 
-    const order = await db.one(
-      `INSERT INTO orders (buyer_id, seller_id, product_id, amount, commission, net_amount, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', NOW())
-       RETURNING *`,
-      [buyer_id, seller_id, product_id, amount, commission, netAmount]
+    // Vérifier que le produit existe
+    const productRes = await query("SELECT * FROM products WHERE id = $1", [product_id]);
+    const product = productRes.rows[0];
+
+    if (!product) {
+      return res.status(404).json({ message: "Produit introuvable" });
+    }
+
+    const total = product.price * quantity;
+
+    const result = await query(
+      `INSERT INTO orders (buyer_id, seller_id, product_id, quantity, total_amount, status)
+       VALUES ($1, $2, $3, $4, $5, 'pending')
+       RETURNING id, buyer_id, seller_id, product_id, quantity, total_amount, status, created_at`,
+      [req.user.id, product.seller_id, product.id, quantity, total]
     );
 
-    return res.status(201).json({ message: "Commande créée avec succès", order });
+    res.status(201).json({
+      message: "Commande créée avec succès",
+      order: result.rows[0],
+    });
   } catch (error) {
-    console.error("Erreur createOrder:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur création commande :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
 /**
- * Confirmer la livraison par l’acheteur → libération des fonds au vendeur
+ * Récupérer toutes les commandes de l’utilisateur connecté
  */
-exports.confirmOrder = async (req, res) => {
-  const { order_id, buyer_id } = req.body;
-
+export const getMyOrders = async (req, res) => {
   try {
-    const order = await db.oneOrNone(
-      "SELECT * FROM orders WHERE id = $1 AND buyer_id = $2",
-      [order_id, buyer_id]
+    const result = await query(
+      `SELECT o.id, o.status, o.total_amount, o.quantity, o.created_at,
+              p.title, p.price,
+              u.id AS seller_id, u.name AS seller_name
+       FROM orders o
+       JOIN products p ON o.product_id = p.id
+       JOIN users u ON o.seller_id = u.id
+       WHERE o.buyer_id = $1
+       ORDER BY o.created_at DESC`,
+      [req.user.id]
     );
 
-    if (!order) {
-      return res.status(404).json({ message: "Commande introuvable ou non autorisée" });
-    }
-
-    if (order.status !== "delivered") {
-      return res.status(400).json({ message: "Commande non encore livrée ou déjà confirmée" });
-    }
-
-    // Libérer les fonds au vendeur
-    await db.none(
-      `UPDATE sellers SET balance = balance + $1 WHERE id = $2`,
-      [order.net_amount, order.seller_id]
-    );
-
-    // Mettre à jour la commande
-    const updated = await db.one(
-      `UPDATE orders 
-       SET status = 'confirmed', confirmed_at = NOW(), updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-      [order_id]
-    );
-
-    return res.json({ message: "Commande confirmée, fonds libérés", order: updated });
+    res.json(result.rows);
   } catch (error) {
-    console.error("Erreur confirmOrder:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur récupération commandes :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
 /**
- * Marquer une commande en litige (admin uniquement)
+ * Récupérer toutes les ventes (commandes reçues par un vendeur)
  */
-exports.markDispute = async (req, res) => {
-  const { order_id } = req.body;
-
+export const getMySales = async (req, res) => {
   try {
-    const order = await db.oneOrNone("SELECT * FROM orders WHERE id = $1", [order_id]);
+    const result = await query(
+      `SELECT o.id, o.status, o.total_amount, o.quantity, o.created_at,
+              p.title, p.price,
+              u.id AS buyer_id, u.name AS buyer_name
+       FROM orders o
+       JOIN products p ON o.product_id = p.id
+       JOIN users u ON o.buyer_id = u.id
+       WHERE o.seller_id = $1
+       ORDER BY o.created_at DESC`,
+      [req.user.id]
+    );
 
-    if (!order) {
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erreur récupération ventes :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * Mettre à jour le statut d’une commande (ex: payé, livré)
+ */
+export const updateOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ["pending", "paid", "delivered", "cancelled"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Statut invalide" });
+    }
+
+    const result = await query(
+      `UPDATE orders SET status = $1 WHERE id = $2 RETURNING *`,
+      [status, id]
+    );
+
+    if (result.rows.length === 0) {
       return res.status(404).json({ message: "Commande introuvable" });
     }
 
-    if (order.status !== "pending" && order.status !== "delivered") {
-      return res.status(400).json({ message: "Impossible de mettre en litige cette commande" });
-    }
-
-    const updated = await db.one(
-      `UPDATE orders 
-       SET status = 'dispute', updated_at = NOW()
-       WHERE id = $1 RETURNING *`,
-      [order_id]
-    );
-
-    return res.json({ message: "Commande mise en litige", order: updated });
+    res.json({
+      message: "Statut mis à jour",
+      order: result.rows[0],
+    });
   } catch (error) {
-    console.error("Erreur markDispute:", error);
-    return res.status(500).json({ message: "Erreur serveur" });
+    console.error("Erreur mise à jour commande :", error);
+    res.status(500).json({ message: "Erreur serveur" });
   }
 };
