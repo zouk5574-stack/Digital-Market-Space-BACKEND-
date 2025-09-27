@@ -153,40 +153,101 @@ export const requestWithdrawal = async (req, res) => {
 export const getMyWithdrawals = async (req, res) => {
   try {
     const userId = req.user.id;
-    const result = await query(
-      "SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC",
+    const result import db from "../config/db.js";
+import { toCents } from "../utils/money.js";
+import cron from "node-cron";
+
+// 💸 Demande de retrait
+export const requestWithdrawal = async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Montant invalide" });
+    }
+
+    // Vérifier solde de l’utilisateur
+    const balanceRes = await db.query(
+      `SELECT balance FROM wallets WHERE user_id = $1`,
       [userId]
     );
 
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Erreur getMyWithdrawals :", error);
-    res.status(500).json({ message: "Erreur serveur" });
+    if (balanceRes.rows.length === 0) {
+      return res.status(400).json({ message: "Portefeuille introuvable" });
+    }
+
+    const balance = Number(balanceRes.rows[0].balance);
+
+    if (balance < toCents(amount)) {
+      return res.status(400).json({ message: "Solde insuffisant" });
+    }
+
+    // Débiter le portefeuille immédiatement
+    await db.query(
+      `UPDATE wallets SET balance = balance - $1 WHERE user_id = $2`,
+      [toCents(amount), userId]
+    );
+
+    // Créer une demande "pending"
+    const withdrawal = await db.query(
+      `INSERT INTO withdrawals (user_id, amount, status, created_at)
+       VALUES ($1, $2, 'pending', NOW()) RETURNING *`,
+      [userId, toCents(amount)]
+    );
+
+    res.json({
+      success: true,
+      withdrawal: withdrawal.rows[0],
+      autoConfirmed: false,
+    });
+  } catch (err) {
+    console.error("❌ Erreur retrait :", err);
+    res.status(500).json({ message: "Erreur lors de la demande de retrait" });
   }
 };
 
-/**
- * ✅ Admin : voir toutes les demandes de retrait
- */
-export const getAllWithdrawals = async (req, res) => {
+// ✅ Liste des retraits (admin)
+export const getWithdrawals = async (req, res) => {
   try {
-    const result = await query(
-      `SELECT w.*, u.name, u.email
+    const result = await db.query(
+      `SELECT w.*, u.username 
        FROM withdrawals w
        JOIN users u ON w.user_id = u.id
        ORDER BY w.created_at DESC`
     );
-
     res.json(result.rows);
-  } catch (error) {
-    console.error("Erreur getAllWithdrawals :", error);
-    res.status(500).json({ message: "Erreur serveur" });
+  } catch (err) {
+    res.status(500).json({ message: "Erreur récupération retraits" });
   }
 };
 
-/**
- * ✅ Admin : mise à jour du statut d’un retrait (si auto_withdrawals = false)
- */
+// ⚡ Confirmation manuelle par admin
+export const confirmWithdrawal = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await db.query(
+      `UPDATE withdrawals 
+       SET status = 'confirmed', confirmed_at = NOW()
+       WHERE id = $1 AND status = 'pending'
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Retrait introuvable ou déjà confirmé" });
+    }
+
+    res.json({ success: true, withdrawal: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ message: "Erreur confirmation retrait" });
+  }
+};
+
+// ✅ Admin : mise à jour du statut d’un retrait (si auto_withdrawals = false)
 export const updateWithdrawalStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -196,7 +257,15 @@ export const updateWithdrawalStatus = async (req, res) => {
       return res.status(400).json({ message: "Statut invalide" });
     }
 
-    const result = await query(
+    // Vérifier si auto_withdrawals est activé
+    const settings = await db.query(`SELECT auto_withdrawals FROM settings LIMIT 1`);
+    const autoWithdrawals = settings.rows[0]?.auto_withdrawals;
+
+    if (autoWithdrawals) {
+      return res.status(403).json({ message: "⚠️ Mode auto_withdrawals activé, impossible de mettre à jour manuellement" });
+    }
+
+    const result = await db.query(
       "UPDATE withdrawals SET status = $1 WHERE id = $2 RETURNING *",
       [status, id]
     );
@@ -214,3 +283,22 @@ export const updateWithdrawalStatus = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur" });
   }
 };
+
+// ⏰ Auto-confirmation après 1h30 min
+cron.schedule("*/10 * * * *", async () => {
+  try {
+    const result = await db.query(
+      `UPDATE withdrawals
+       SET status = 'confirmed', confirmed_at = NOW()
+       WHERE status = 'pending'
+       AND created_at <= NOW() - INTERVAL '90 minutes'
+       RETURNING id`
+    );
+
+    if (result.rowCount > 0) {
+      console.log(`✅ ${result.rowCount} retrait(s) confirmés automatiquement`);
+    }
+  } catch (err) {
+    console.error("❌ Erreur auto-confirmation retraits :", err);
+  }
+});
