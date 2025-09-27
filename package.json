@@ -2,7 +2,7 @@
   "name": "digital-market-space-backend",
   "version": "1.0.0",
   "description": "Backend officiel de Digital Market Space - Marketplace moderne avec paiements Fedapay",
-  "main": "src/server.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
