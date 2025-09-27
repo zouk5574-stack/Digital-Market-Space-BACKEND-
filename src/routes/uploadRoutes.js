@@ -82,4 +82,24 @@ router.get("/uploads/list", (req, res) => {
   });
 });
 
+// ✅ Supprimer un fichier par son nom
+router.delete("/uploads/:filename", (req, res) => {
+  const filePath = path.join("uploads", req.params.filename);
+
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      return res.status(404).json({
+        success: false,
+        message: "Fichier introuvable ou déjà supprimé ❌",
+        error: err.message
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Fichier ${req.params.filename} supprimé avec succès 🗑️`
+    });
+  });
+});
+
 export default router;
