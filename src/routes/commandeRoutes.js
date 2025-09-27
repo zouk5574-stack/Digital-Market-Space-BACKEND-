@@ -1,116 +1,74 @@
 import express from "express";
-import pool from "../config/db.js"; // connexion PostgreSQL
+import pool from "../config/db.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
+
 const router = express.Router();
 
 /**
- * ✅ Créer une nouvelle commande freelance
+ * ✅ Créer une commande produit
  */
-router.post("/", async (req, res) => {
+router.post("/", authMiddleware, async (req, res) => {
   try {
-    const { utilisateur_id, produit_id, montant } = req.body;
-
-    if (!utilisateur_id || !produit_id || !montant) {
-      return res.status(400).json({ error: "Données incomplètes" });
-    }
+    const { produit_id, quantite, prix_total } = req.body;
+    const utilisateur_id = req.user.id; // récupéré via le token
 
     const result = await pool.query(
-      `INSERT INTO commandes_freelance (utilisateur_id, produit_id, montant, statut) 
-       VALUES ($1, $2, $3, $4) 
+      `INSERT INTO ordres (id, utilisateur_id, produit_id, quantite, prix_total, statut)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, 'en_attente')
        RETURNING *`,
-      [utilisateur_id, produit_id, montant, "en_attente"]
+      [utilisateur_id, produit_id, quantite, prix_total]
     );
 
-    res.status(201).json({
-      success: true,
-      commande: result.rows[0],
-    });
-  } catch (err) {
-    console.error("Erreur création commande:", err);
-    res.status(500).json({ error: "Erreur serveur" });
+    res.status(201).json({ success: true, commande: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Erreur création commande produit :", error);
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 });
 
 /**
- * ✅ Récupérer toutes les commandes d’un utilisateur
+ * ✅ Récupérer toutes les commandes de l’utilisateur connecté
  */
-router.get("/utilisateur/:id", async (req, res) => {
+router.get("/", authMiddleware, async (req, res) => {
   try {
-    const { id } = req.params;
+    const utilisateur_id = req.user.id;
 
     const result = await pool.query(
-      `SELECT c.*, p.nom AS produit_nom, p.type AS produit_type
-       FROM commandes_freelance c
-       JOIN produits p ON c.produit_id = p.id
-       WHERE c.utilisateur_id = $1
-       ORDER BY c.date_creation DESC`,
-      [id]
+      `SELECT o.*, p.nom AS produit_nom
+       FROM ordres o
+       JOIN produits p ON o.produit_id = p.id
+       WHERE o.utilisateur_id = $1`,
+      [utilisateur_id]
     );
 
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Erreur récupération commandes utilisateur:", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
-
-/**
- * ✅ Récupérer une commande par son ID
- */
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(
-      `SELECT c.*, u.nom AS acheteur_nom, p.nom AS produit_nom
-       FROM commandes_freelance c
-       JOIN utilisateurs u ON c.utilisateur_id = u.id
-       JOIN produits p ON c.produit_id = p.id
-       WHERE c.id = $1`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Commande introuvable" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error("Erreur récupération commande:", err);
-    res.status(500).json({ error: "Erreur serveur" });
+    res.json({ success: true, commandes: result.rows });
+  } catch (error) {
+    console.error("❌ Erreur récupération commandes :", error);
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 });
 
 /**
  * ✅ Mettre à jour le statut d’une commande
  */
-router.put("/:id/statut", async (req, res) => {
+router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
     const { statut } = req.body;
 
-    if (!statut) {
-      return res.status(400).json({ error: "Statut requis" });
-    }
-
     const result = await pool.query(
-      `UPDATE commandes_freelance
-       SET statut = $1
-       WHERE id = $2
-       RETURNING *`,
+      `UPDATE ordres SET statut = $1 WHERE id = $2 RETURNING *`,
       [statut, id]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Commande introuvable" });
+      return res.status(404).json({ success: false, message: "Commande introuvable" });
     }
 
-    res.json({
-      success: true,
-      commande: result.rows[0],
-    });
-  } catch (err) {
-    console.error("Erreur mise à jour statut commande:", err);
-    res.status(500).json({ error: "Erreur serveur" });
+    res.json({ success: true, commande: result.rows[0] });
+  } catch (error) {
+    console.error("❌ Erreur update commande produit :", error);
+    res.status(500).json({ success: false, message: "Erreur serveur" });
   }
 });
 
