@@ -86,6 +86,114 @@ export const updateWithdrawalStatus = async (req, res) => {
 
     if (!["approved", "rejected"].includes(status)) {
       return res.status(400).json({ message: "Statut invalide" });
+/**
+ * src/controllers/withdrawalController.js
+ *
+ * Gestion des retraits des vendeurs (manuel ou auto selon admin_settings).
+ */
+
+import { query } from "../config/db.js";
+
+/**
+ * ✅ Créer une demande de retrait
+ */
+export const requestWithdrawal = async (req, res) => {
+  try {
+    const userId = req.user.id; // récupéré depuis middleware auth
+    const { amount } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Montant invalide" });
+    }
+
+    // Vérifier le solde utilisateur
+    const userRes = await query("SELECT balance FROM users WHERE id = $1", [userId]);
+    const user = userRes.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+
+    if (user.balance < amount) {
+      return res.status(400).json({ message: "Solde insuffisant" });
+    }
+
+    // Vérifier si les retraits automatiques sont activés
+    const settingsRes = await query("SELECT auto_withdrawals FROM admin_settings LIMIT 1");
+    const autoWithdrawals = settingsRes.rows.length ? settingsRes.rows[0].auto_withdrawals : false;
+
+    const status = autoWithdrawals ? "approved" : "pending";
+
+    // Créer la demande de retrait
+    const withdrawalRes = await query(
+      `INSERT INTO withdrawals (user_id, amount, status)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [userId, amount, status]
+    );
+
+    // Débiter immédiatement le solde utilisateur
+    await query("UPDATE users SET balance = balance - $1 WHERE id = $2", [amount, userId]);
+
+    res.json({
+      message: autoWithdrawals
+        ? "Retrait validé automatiquement ✅"
+        : "Demande de retrait en attente ⏳",
+      withdrawal: withdrawalRes.rows[0],
+    });
+  } catch (error) {
+    console.error("Erreur lors de la demande de retrait :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * ✅ Récupérer les retraits de l’utilisateur connecté
+ */
+export const getMyWithdrawals = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await query(
+      "SELECT * FROM withdrawals WHERE user_id = $1 ORDER BY created_at DESC",
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erreur getMyWithdrawals :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * ✅ Admin : voir toutes les demandes de retrait
+ */
+export const getAllWithdrawals = async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT w.*, u.name, u.email
+       FROM withdrawals w
+       JOIN users u ON w.user_id = u.id
+       ORDER BY w.created_at DESC`
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erreur getAllWithdrawals :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
+/**
+ * ✅ Admin : mise à jour du statut d’un retrait (si auto_withdrawals = false)
+ */
+export const updateWithdrawalStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Statut invalide" });
     }
 
     const result = await query(
@@ -98,11 +206,11 @@ export const updateWithdrawalStatus = async (req, res) => {
     }
 
     res.json({
-      message: `Retrait ${status}`,
+      message: `Retrait ${status} ✅`,
       withdrawal: result.rows[0],
     });
   } catch (error) {
-    console.error("Erreur mise à jour retrait :", error);
+    console.error("Erreur updateWithdrawalStatus :", error);
     res.status(500).json({ message: "Erreur serveur" });
   }
 };
