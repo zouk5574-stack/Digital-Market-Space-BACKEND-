@@ -12,7 +12,7 @@ import helmet from "helmet";
 
 import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
-import commandeRoutes from "./routes/commandeRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js"; // ✅ remplacé commandeRoutes
 import commandesFreelanceRoutes from "./routes/commandesFreelanceRoutes.js";
 import deliveriesRoutes from "./routes/deliveriesRoutes.js";
 import freelanceDeliveryRoutes from "./routes/freelanceDeliveryRoutes.js";
@@ -35,16 +35,16 @@ if (!fs.existsSync(uploadsPath)) {
 }
 
 // Middlewares
-app.use(helmet()); // security headers
+app.use(helmet()); 
 app.use(cors());
-app.use(express.json({ limit: "50mb" })); // large payloads for metadata
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(morgan("dev"));
 
-// Serve static uploaded files (only if you want direct public access; otherwise use protected download routes)
+// Static files
 app.use("/uploads", express.static(uploadsPath));
 
-// Healthcheck root
+// Healthcheck
 app.get("/", (req, res) => {
   res.status(200).send("✅ Backend Digital Market Space en ligne !");
 });
@@ -52,8 +52,8 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/produits", productRoutes);
-app.use("/api/commandes", commandeRoutes); // ordres (produits)
-app.use("/api/freelance/commandes", commandesFreelanceRoutes); // commandes_freelance (services)
+app.use("/api/orders", orderRoutes); // ✅ updated
+app.use("/api/freelance/commandes", commandesFreelanceRoutes);
 app.use("/api/livraisons", deliveriesRoutes);
 app.use("/api/freelance/livraisons", freelanceDeliveryRoutes);
 app.use("/api/paiements", paymentRoutes);
@@ -64,7 +64,7 @@ app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/withdrawals", withdrawalRoutes);
 
-// Error handler (must be last)
+// Error handler
 app.use(errorHandler);
 
 export default app;
