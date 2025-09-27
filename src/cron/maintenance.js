@@ -1,26 +1,49 @@
-import cron from 'node-cron';
-import { query } from '../config/db.js';
+import cron from "node-cron";
+import { query } from "../config/db.js";
 
-// Runs every day at 02:00 UTC (adjust as necessary)
-cron.schedule('0 2 * * *', async () => {
+// ✅ Maintenance quotidienne (02h00 UTC)
+cron.schedule("0 2 * * *", async () => {
   try {
-    console.log('[cron] Running maintenance tasks');
+    console.log("⏳ [cron] Lancement des tâches de maintenance...");
 
-    // 1) Archive draft products older than 4 months OR products older that sold less than 40 in 4 months
-    // Identify products: created_at < now() - 4 months AND total_sales < 40
-    const toArchive = await query(`SELECT * FROM products WHERE (status='draft' AND created_at < now() - INTERVAL '4 months') OR (created_at < now() - INTERVAL '4 months' AND total_sales < 40)`);
+    // 1) Archiver les produits inactifs ou peu performants
+    const toArchive = await query(
+      `SELECT id, status, created_at, total_sales, title, seller_id, price
+       FROM products
+       WHERE 
+         (status = 'draft' AND created_at < NOW() - INTERVAL '4 months')
+         OR 
+         (created_at < NOW() - INTERVAL '4 months' AND total_sales < 40)`
+    );
+
     for (const p of toArchive.rows) {
-      // insert into archives
-      await query('INSERT INTO archives (original_table, original_id, payload, reason) VALUES ($1,$2,$3,$4)', ['products', p.id, JSON_BUILD_OBJECT('product', p), 'auto-archive-inactive-4months']);
-      // update original to archived
-      await query('UPDATE products SET status=$1 WHERE id=$2', ['archived', p.id]);
+      // Stocker l’ancien produit dans les archives
+      await query(
+        `INSERT INTO archives (original_table, original_id, payload, reason, archived_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        ["products", p.id, JSON.stringify(p), "auto-archive-inactive-4months"]
+      );
+
+      // Marquer le produit comme archivé
+      await query(`UPDATE products SET status = $1 WHERE id = $2`, [
+        "archived",
+        p.id,
+      ]);
+
+      console.log(`📦 Produit ${p.id} archivé automatiquement`);
     }
 
-    // 2) Delete archives older than 6 months
-    await query(`DELETE FROM archives WHERE archived_at < now() - INTERVAL '6 months'`);
+    // 2) Supprimer les archives trop anciennes
+    const deleted = await query(
+      `DELETE FROM archives WHERE archived_at < NOW() - INTERVAL '6 months' RETURNING id`
+    );
 
-    console.log('[cron] Maintenance finished');
+    if (deleted.rows.length > 0) {
+      console.log(`🗑️ ${deleted.rows.length} archives supprimées (plus de 6 mois)`);
+    }
+
+    console.log("✅ [cron] Maintenance terminée");
   } catch (err) {
-    console.error('[cron] Maintenance error', err);
+    console.error("❌ [cron] Erreur maintenance :", err.message);
   }
 });
