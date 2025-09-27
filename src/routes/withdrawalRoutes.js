@@ -1,6 +1,32 @@
-import express from 'express';
-import { requestWithdraw } from '../controllers/withdrawalController.js';
-import { protect } from '../middleware/auth.js';
+/**
+ * src/routes/withdrawalRoutes.js
+ *
+ * Routes pour la gestion des retraits
+ */
+
+import express from "express";
+import {
+  requestWithdrawal,
+  getMyWithdrawals,
+  getAllWithdrawals,
+  updateWithdrawalStatus,
+} from "../controllers/withdrawalController.js";
+
+import { auth } from "../middleware/auth.js";
+import { authAdmin } from "../middleware/authAdmin.js";
+
 const router = express.Router();
-router.post('/request', protect, requestWithdraw);
+
+// ✅ Utilisateur : demander un retrait
+router.post("/", auth, requestWithdrawal);
+
+// ✅ Utilisateur : voir ses retraits
+router.get("/me", auth, getMyWithdrawals);
+
+// ✅ Admin : voir toutes les demandes
+router.get("/", authAdmin, getAllWithdrawals);
+
+// ✅ Admin : changer le statut d’un retrait
+router.put("/:id/status", authAdmin, updateWithdrawalStatus);
+
 export default router;
