@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "build": "echo 'Build terminé avec succès !'",
     "vercel-build": "echo 'Vercel build OK'"
   },
   "keywords": [
@@ -15,7 +16,10 @@
     "express",
     "supabase",
     "fedapay",
-    "vercel"
+    "vercel",
+    "render",
+    "api",
+    "ecommerce"
   ],
   "author": "AFFO Marzouck",
   "license": "MIT",
@@ -33,6 +37,6 @@
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": "18.x"
   }
 }
