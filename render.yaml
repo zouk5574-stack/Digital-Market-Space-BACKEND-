@@ -26,7 +26,7 @@ services:
   repo: https://github.com/zouk5574-stack/Digital-Market-Space-BACKEND-
   plan: free
   region: oregon
-  buildCommand: 'npm install'
-  startCommand: 'node server.js'
+  buildCommand: 'yarn install'
+  startCommand: 'server.js'
   autoDeployTrigger: 'commit'
   
