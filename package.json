@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "build": "echo 'Build terminé avec succès !'",
-    "vercel-build": "echo 'Vercel build OK'"
+    "build": "echo 'Nothing to build'"
   },
   "keywords": [
     "marketplace",
@@ -16,10 +15,7 @@
     "express",
     "supabase",
     "fedapay",
-    "vercel",
-    "render",
-    "api",
-    "ecommerce"
+    "render"
   ],
   "author": "AFFO Marzouck",
   "license": "MIT",
@@ -31,6 +27,7 @@
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.3",
     "pg-promise": "^11.5.0"
   },
   "devDependencies": {
