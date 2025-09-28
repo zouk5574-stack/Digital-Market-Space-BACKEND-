@@ -26,6 +26,8 @@ import notificationRoutes from "./routes/notificationRoute.js";
 import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 
 import errorHandler from "./config/errorHandler.js";
+import adminRoutes from "./src/routes/adminRoutes.js";
+
 
 const app = express();
 
@@ -100,6 +102,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/admin/settings", adminSettingsRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/withdrawals", withdrawalRoutes);
+app.use("/api/admin", adminRoutes);
 
 /**
  * ===============================
