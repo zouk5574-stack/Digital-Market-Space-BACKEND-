@@ -1,4 +1,4 @@
-import/src/middleware/upload.js
+import /src/middleware/upload.js
 import multer from "multer";
 import path from "path";
 
