@@ -5,8 +5,6 @@ services:
         value: production
       - key: PORT
         sync: false
-      - key: JWT_SECRET
-        value: "Affom@rzouck13"
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
@@ -26,7 +24,7 @@ services:
   repo: https://github.com/zouk5574-stack/Digital-Market-Space-BACKEND-
   plan: free
   region: oregon
-  buildCommand: 'yarn install'
+  buildCommand: 'npm install'
   startCommand: 'server.js'
   autoDeployTrigger: 'commit'
   
