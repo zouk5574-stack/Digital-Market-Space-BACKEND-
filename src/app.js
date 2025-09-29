@@ -26,7 +26,7 @@ import notificationRoutes from "./routes/notificationRoute.js";
 import withdrawalRoutes from "./routes/withdrawalRoutes.js";
 
 import errorHandler from "./config/errorHandler.js";
-import adminRoutes from "./src/routes/adminRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 
 const app = express();
